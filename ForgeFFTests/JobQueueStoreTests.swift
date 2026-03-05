@@ -3,6 +3,16 @@ import XCTest
 
 @MainActor
 final class JobQueueStoreTests: XCTestCase {
+    private func makeConfiguredSettingsStore() -> SettingsStore {
+        SettingsStore(
+            pathDetector: FFmpegPathDetector(
+                isExecutable: { FileManager.default.isExecutableFile(atPath: $0) },
+                commandLookup: { _ in "/usr/bin/true" },
+                pathExists: { FileManager.default.fileExists(atPath: $0) }
+            )
+        )
+    }
+
     func testRemovingRunningJobWithNoRemainingItemsResetsToIdle() throws {
         let settings = SettingsStore(
             pathDetector: FFmpegPathDetector(
@@ -132,13 +142,7 @@ final class JobQueueStoreTests: XCTestCase {
     }
 
     func testStartOrResumeTreatsPausedSelectionAsRunnable() throws {
-        let settings = SettingsStore(
-            pathDetector: FFmpegPathDetector(
-                isExecutable: { _ in false },
-                commandLookup: { _ in nil },
-                pathExists: { _ in false }
-            )
-        )
+        let settings = makeConfiguredSettingsStore()
         let history = HistoryStore()
         let store = JobQueueStore(settingsStore: settings, historyStore: history)
 
@@ -158,13 +162,7 @@ final class JobQueueStoreTests: XCTestCase {
     }
 
     func testStartOrResumeUsesSelectionScopeForRunnablePredicate() throws {
-        let settings = SettingsStore(
-            pathDetector: FFmpegPathDetector(
-                isExecutable: { _ in false },
-                commandLookup: { _ in nil },
-                pathExists: { _ in false }
-            )
-        )
+        let settings = makeConfiguredSettingsStore()
         let history = HistoryStore()
         let store = JobQueueStore(settingsStore: settings, historyStore: history)
 
