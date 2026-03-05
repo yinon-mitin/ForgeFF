@@ -22,3 +22,6 @@ build/
 
 # Swift Package Manager
 .swiftpm/
+
+#Logs
+logs/

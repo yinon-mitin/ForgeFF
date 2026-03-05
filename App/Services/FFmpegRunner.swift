@@ -34,7 +34,7 @@ final class FFmpegRunner {
         ffmpegURL: URL?,
         settings: AppSettings,
         capabilities: FFmpegEncoderCapabilities = .none,
-        progress: @escaping @Sendable (FFmpegProgress) -> Void
+        progress: @escaping (FFmpegProgress) -> Void
     ) async throws -> JobResultSummary {
         guard let executableURL = ffmpegURL else {
             throw FFmpegRunnerError.missingBinary
@@ -89,7 +89,7 @@ final class FFmpegRunner {
         executableURL: URL,
         arguments: [String],
         totalDuration: Double?,
-        progress: @escaping @Sendable (FFmpegProgress) -> Void,
+        progress: @escaping (FFmpegProgress) -> Void,
         progressTap: @escaping (FFmpegProgress) -> Void
     ) async throws -> Double? {
         let process = Process()
