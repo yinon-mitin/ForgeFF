@@ -1,0 +1,513 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		001000000000000000000001 /* AppMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000001 /* AppMain.swift */; };
+		001000000000000000000002 /* VideoJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000002 /* VideoJob.swift */; };
+		001000000000000000000003 /* ConversionOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000003 /* ConversionOptions.swift */; };
+		001000000000000000000004 /* MediaMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000004 /* MediaMetadata.swift */; };
+		001000000000000000000005 /* JobHistoryRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000005 /* JobHistoryRecord.swift */; };
+		001000000000000000000006 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000006 /* SettingsStore.swift */; };
+		001000000000000000000007 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000007 /* HistoryStore.swift */; };
+		001000000000000000000008 /* FFprobeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000008 /* FFprobeService.swift */; };
+		001000000000000000000009 /* FFmpegCommandBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000009 /* FFmpegCommandBuilder.swift */; };
+		001000000000000000000023 /* FFmpegEncoderCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000023 /* FFmpegEncoderCapabilities.swift */; };
+		00100000000000000000000A /* FFmpegRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000000A /* FFmpegRunner.swift */; };
+		00100000000000000000000B /* JobQueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000000B /* JobQueueStore.swift */; };
+		00100000000000000000000C /* QueueViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000000C /* QueueViewModel.swift */; };
+		00100000000000000000000D /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000000D /* RootView.swift */; };
+		00100000000000000000000E /* QueueSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000000E /* QueueSidebarView.swift */; };
+		001000000000000000000011 /* PresetPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000011 /* PresetPanelView.swift */; };
+		001000000000000000000020 /* WrappingPills.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000020 /* WrappingPills.swift */; };
+		001000000000000000000012 /* FilenameRenamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000012 /* FilenameRenamer.swift */; };
+		001000000000000000000013 /* OutputTemplateRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000013 /* OutputTemplateRenderer.swift */; };
+		001000000000000000000018 /* FFmpegPathDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000001A /* FFmpegPathDetection.swift */; };
+		001000000000000000000019 /* AppCommandHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000001B /* AppCommandHandler.swift */; };
+		001000000000000000000015 /* FilenameRenamerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000015 /* FilenameRenamerTests.swift */; };
+		001000000000000000000016 /* FFprobeParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000016 /* FFprobeParserTests.swift */; };
+		001000000000000000000017 /* FFmpegCommandBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000017 /* FFmpegCommandBuilderTests.swift */; };
+		001000000000000000000021 /* ConversionOptionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000021 /* ConversionOptionsTests.swift */; };
+		001000000000000000000022 /* WrappingPillsLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000022 /* WrappingPillsLayoutTests.swift */; };
+		00100000000000000000001A /* FFmpegPathDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000001C /* FFmpegPathDetectorTests.swift */; };
+			00100000000000000000001B /* AppCommandHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000001D /* AppCommandHandlerTests.swift */; };
+			001000000000000000000024 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000024 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		003000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 004000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 005000000000000000000001;
+			remoteInfo = ForgeFF;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		002000000000000000000001 /* AppMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMain.swift; sourceTree = "<group>"; };
+		002000000000000000000002 /* VideoJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoJob.swift; sourceTree = "<group>"; };
+		002000000000000000000003 /* ConversionOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversionOptions.swift; sourceTree = "<group>"; };
+		002000000000000000000004 /* MediaMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaMetadata.swift; sourceTree = "<group>"; };
+		002000000000000000000005 /* JobHistoryRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobHistoryRecord.swift; sourceTree = "<group>"; };
+		002000000000000000000006 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		002000000000000000000007 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
+		002000000000000000000008 /* FFprobeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFprobeService.swift; sourceTree = "<group>"; };
+		002000000000000000000009 /* FFmpegCommandBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFmpegCommandBuilder.swift; sourceTree = "<group>"; };
+		002000000000000000000023 /* FFmpegEncoderCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFmpegEncoderCapabilities.swift; sourceTree = "<group>"; };
+		00200000000000000000000A /* FFmpegRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFmpegRunner.swift; sourceTree = "<group>"; };
+		00200000000000000000000B /* JobQueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobQueueStore.swift; sourceTree = "<group>"; };
+		00200000000000000000000C /* QueueViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueViewModel.swift; sourceTree = "<group>"; };
+		00200000000000000000000D /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		00200000000000000000000E /* QueueSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueSidebarView.swift; sourceTree = "<group>"; };
+		002000000000000000000011 /* PresetPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetPanelView.swift; sourceTree = "<group>"; };
+		002000000000000000000020 /* WrappingPills.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WrappingPills.swift; sourceTree = "<group>"; };
+		002000000000000000000012 /* FilenameRenamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilenameRenamer.swift; sourceTree = "<group>"; };
+		002000000000000000000013 /* OutputTemplateRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputTemplateRenderer.swift; sourceTree = "<group>"; };
+		002000000000000000000014 /* ForgeFF.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ForgeFF.entitlements; sourceTree = "<group>"; };
+		002000000000000000000015 /* FilenameRenamerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilenameRenamerTests.swift; sourceTree = "<group>"; };
+		002000000000000000000016 /* FFprobeParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFprobeParserTests.swift; sourceTree = "<group>"; };
+		002000000000000000000017 /* FFmpegCommandBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFmpegCommandBuilderTests.swift; sourceTree = "<group>"; };
+		002000000000000000000021 /* ConversionOptionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversionOptionsTests.swift; sourceTree = "<group>"; };
+		002000000000000000000022 /* WrappingPillsLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WrappingPillsLayoutTests.swift; sourceTree = "<group>"; };
+		00200000000000000000001A /* FFmpegPathDetection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFmpegPathDetection.swift; sourceTree = "<group>"; };
+		00200000000000000000001B /* AppCommandHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCommandHandler.swift; sourceTree = "<group>"; };
+		00200000000000000000001C /* FFmpegPathDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFmpegPathDetectorTests.swift; sourceTree = "<group>"; };
+			00200000000000000000001D /* AppCommandHandlerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCommandHandlerTests.swift; sourceTree = "<group>"; };
+			002000000000000000000024 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+			002000000000000000000018 /* ForgeFF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = ForgeFF.app; sourceTree = BUILT_PRODUCTS_DIR; };
+			002000000000000000000019 /* ForgeFFTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = ForgeFFTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		006000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		006000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		007000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				007000000000000000000002 /* ForgeFF */,
+				007000000000000000000003 /* App */,
+				007000000000000000000004 /* ForgeFFTests */,
+				007000000000000000000005 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+			007000000000000000000002 /* ForgeFF */ = {
+				isa = PBXGroup;
+				children = (
+					002000000000000000000001 /* AppMain.swift */,
+					002000000000000000000024 /* Assets.xcassets */,
+					002000000000000000000014 /* ForgeFF.entitlements */,
+				);
+				path = ForgeFF;
+				sourceTree = "<group>";
+			};
+		007000000000000000000003 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				007000000000000000000006 /* Models */,
+				007000000000000000000007 /* Services */,
+				007000000000000000000008 /* ViewModels */,
+				007000000000000000000009 /* Views */,
+				00700000000000000000000A /* Utilities */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		007000000000000000000004 /* ForgeFFTests */ = {
+			isa = PBXGroup;
+			children = (
+				002000000000000000000015 /* FilenameRenamerTests.swift */,
+				002000000000000000000016 /* FFprobeParserTests.swift */,
+				002000000000000000000017 /* FFmpegCommandBuilderTests.swift */,
+				002000000000000000000021 /* ConversionOptionsTests.swift */,
+				002000000000000000000022 /* WrappingPillsLayoutTests.swift */,
+				00200000000000000000001C /* FFmpegPathDetectorTests.swift */,
+				00200000000000000000001D /* AppCommandHandlerTests.swift */,
+			);
+			path = ForgeFFTests;
+			sourceTree = "<group>";
+		};
+		007000000000000000000005 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				002000000000000000000018 /* ForgeFF.app */,
+				002000000000000000000019 /* ForgeFFTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		007000000000000000000006 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				002000000000000000000002 /* VideoJob.swift */,
+				002000000000000000000003 /* ConversionOptions.swift */,
+				002000000000000000000004 /* MediaMetadata.swift */,
+				002000000000000000000005 /* JobHistoryRecord.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		007000000000000000000007 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				002000000000000000000006 /* SettingsStore.swift */,
+				002000000000000000000007 /* HistoryStore.swift */,
+				002000000000000000000008 /* FFprobeService.swift */,
+				002000000000000000000009 /* FFmpegCommandBuilder.swift */,
+				002000000000000000000023 /* FFmpegEncoderCapabilities.swift */,
+				00200000000000000000000A /* FFmpegRunner.swift */,
+				00200000000000000000000B /* JobQueueStore.swift */,
+				00200000000000000000001A /* FFmpegPathDetection.swift */,
+				00200000000000000000001B /* AppCommandHandler.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		007000000000000000000008 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				00200000000000000000000C /* QueueViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		007000000000000000000009 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				00200000000000000000000D /* RootView.swift */,
+				00200000000000000000000E /* QueueSidebarView.swift */,
+				002000000000000000000011 /* PresetPanelView.swift */,
+				002000000000000000000020 /* WrappingPills.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		00700000000000000000000A /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				002000000000000000000012 /* FilenameRenamer.swift */,
+				002000000000000000000013 /* OutputTemplateRenderer.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		005000000000000000000001 /* ForgeFF */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 008000000000000000000001 /* Build configuration list for PBXNativeTarget "ForgeFF" */;
+			buildPhases = (
+				006000000000000000000003 /* Sources */,
+				006000000000000000000001 /* Frameworks */,
+				006000000000000000000004 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ForgeFF;
+			productName = ForgeFF;
+			productReference = 002000000000000000000018 /* ForgeFF.app */;
+			productType = "com.apple.product-type.application";
+		};
+		005000000000000000000002 /* ForgeFFTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 008000000000000000000002 /* Build configuration list for PBXNativeTarget "ForgeFFTests" */;
+			buildPhases = (
+				006000000000000000000005 /* Sources */,
+				006000000000000000000002 /* Frameworks */,
+				006000000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				009000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = ForgeFFTests;
+			productName = ForgeFFTests;
+			productReference = 002000000000000000000019 /* ForgeFFTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		004000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					005000000000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					005000000000000000000002 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = 005000000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = 008000000000000000000003 /* Build configuration list for PBXProject "ForgeFF" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 007000000000000000000001;
+			productRefGroup = 007000000000000000000005 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				005000000000000000000001 /* ForgeFF */,
+				005000000000000000000002 /* ForgeFFTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+			006000000000000000000004 /* Resources */ = {
+				isa = PBXResourcesBuildPhase;
+				buildActionMask = 2147483647;
+				files = (
+					001000000000000000000024 /* Assets.xcassets in Resources */,
+				);
+				runOnlyForDeploymentPostprocessing = 0;
+			};
+		006000000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		006000000000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				001000000000000000000001 /* AppMain.swift in Sources */,
+				001000000000000000000002 /* VideoJob.swift in Sources */,
+				001000000000000000000003 /* ConversionOptions.swift in Sources */,
+				001000000000000000000004 /* MediaMetadata.swift in Sources */,
+				001000000000000000000005 /* JobHistoryRecord.swift in Sources */,
+				001000000000000000000006 /* SettingsStore.swift in Sources */,
+				001000000000000000000007 /* HistoryStore.swift in Sources */,
+				001000000000000000000008 /* FFprobeService.swift in Sources */,
+				001000000000000000000009 /* FFmpegCommandBuilder.swift in Sources */,
+				001000000000000000000023 /* FFmpegEncoderCapabilities.swift in Sources */,
+				00100000000000000000000A /* FFmpegRunner.swift in Sources */,
+				00100000000000000000000B /* JobQueueStore.swift in Sources */,
+				00100000000000000000000C /* QueueViewModel.swift in Sources */,
+				00100000000000000000000D /* RootView.swift in Sources */,
+				00100000000000000000000E /* QueueSidebarView.swift in Sources */,
+				001000000000000000000011 /* PresetPanelView.swift in Sources */,
+				001000000000000000000020 /* WrappingPills.swift in Sources */,
+				001000000000000000000012 /* FilenameRenamer.swift in Sources */,
+				001000000000000000000013 /* OutputTemplateRenderer.swift in Sources */,
+				001000000000000000000018 /* FFmpegPathDetection.swift in Sources */,
+				001000000000000000000019 /* AppCommandHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		006000000000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				001000000000000000000015 /* FilenameRenamerTests.swift in Sources */,
+				001000000000000000000016 /* FFprobeParserTests.swift in Sources */,
+				001000000000000000000017 /* FFmpegCommandBuilderTests.swift in Sources */,
+				001000000000000000000021 /* ConversionOptionsTests.swift in Sources */,
+				001000000000000000000022 /* WrappingPillsLayoutTests.swift in Sources */,
+				00100000000000000000001A /* FFmpegPathDetectorTests.swift in Sources */,
+				00100000000000000000001B /* AppCommandHandlerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		009000000000000000000001 = {
+			isa = PBXTargetDependency;
+			target = 005000000000000000000001 /* ForgeFF */;
+			targetProxy = 003000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+			00A000000000000000000001 /* Debug */ = {
+				isa = XCBuildConfiguration;
+				buildSettings = {
+					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+					CODE_SIGN_ENTITLEMENTS = ForgeFF/ForgeFF.entitlements;
+					CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_TESTABILITY = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = ForgeFF;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Open source";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.ForgeFF;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+			00A000000000000000000002 /* Release */ = {
+				isa = XCBuildConfiguration;
+				buildSettings = {
+					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+					CODE_SIGN_ENTITLEMENTS = ForgeFF/ForgeFF.entitlements;
+					CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = ForgeFF;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Open source";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.ForgeFF;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		00A000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_TESTABILITY = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@loader_path/../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.ForgeFFTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ForgeFF.app/Contents/MacOS/ForgeFF";
+			};
+			name = Debug;
+		};
+		00A000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@loader_path/../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.ForgeFFTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ForgeFF.app/Contents/MacOS/ForgeFF";
+			};
+			name = Release;
+		};
+		00A000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		00A000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		008000000000000000000001 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00A000000000000000000001 /* Debug */,
+				00A000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		008000000000000000000002 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00A000000000000000000003 /* Debug */,
+				00A000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		008000000000000000000003 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00A000000000000000000005 /* Debug */,
+				00A000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 004000000000000000000001 /* Project object */;
+}

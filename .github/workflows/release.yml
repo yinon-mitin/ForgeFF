@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Build Release app (unsigned)
+        run: |
+          xcodebuild \
+            -project ForgeFF.xcodeproj \
+            -scheme ForgeFF \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath .build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
+
+      - name: Package ZIP and checksum
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          APP_PATH=".build/DerivedData/Build/Products/Release/ForgeFF.app"
+          ZIP_NAME="ForgeFF-macos-${TAG_NAME}.zip"
+          SHA_NAME="${ZIP_NAME}.sha256"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_NAME"
+          shasum -a 256 "$ZIP_NAME" > "$SHA_NAME"
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ForgeFF-macos-${{ github.ref_name }}.zip
+            ForgeFF-macos-${{ github.ref_name }}.zip.sha256
+          generate_release_notes: true

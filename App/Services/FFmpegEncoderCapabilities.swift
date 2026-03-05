@@ -1,0 +1,50 @@
+import Foundation
+
+struct FFmpegEncoderCapabilities: Equatable {
+    var supportsVP9: Bool
+    var supportsSVTAV1: Bool
+    var supportsAOMAV1: Bool
+
+    var supportsAV1: Bool { supportsSVTAV1 || supportsAOMAV1 }
+
+    static let none = FFmpegEncoderCapabilities(
+        supportsVP9: false,
+        supportsSVTAV1: false,
+        supportsAOMAV1: false
+    )
+}
+
+enum FFmpegEncoderDiscovery {
+    static func parseEncodersOutput(_ output: String) -> FFmpegEncoderCapabilities {
+        let normalized = output.lowercased()
+        return FFmpegEncoderCapabilities(
+            supportsVP9: normalized.contains("libvpx-vp9"),
+            supportsSVTAV1: normalized.contains("libsvtav1"),
+            supportsAOMAV1: normalized.contains("libaom-av1")
+        )
+    }
+
+    static func detectCapabilities(ffmpegURL: URL?) -> FFmpegEncoderCapabilities {
+        guard let ffmpegURL else { return .none }
+
+        let process = Process()
+        process.executableURL = ffmpegURL
+        process.arguments = ["-hide_banner", "-encoders"]
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return .none
+        }
+
+        let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let stderr = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        return parseEncodersOutput(output + "\n" + stderr)
+    }
+}
