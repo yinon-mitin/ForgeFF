@@ -189,3 +189,87 @@ extension URL {
         return FileManager.default.isExecutableFile(atPath: url.path) ? url : nil
     }
 }
+
+@MainActor
+final class UserPresetStore: ObservableObject {
+    @Published private(set) var presets: [UserPreset] = []
+
+    private let fileURL: URL
+    private let fileManager: FileManager
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
+    init(
+        fileURL: URL? = nil,
+        fileManager: FileManager = .default
+    ) {
+        self.fileManager = fileManager
+        self.fileURL = fileURL ?? Self.defaultFileURL(fileManager: fileManager)
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        load()
+    }
+
+    func savePreset(name: String, options: ConversionOptions) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let resolvedName = uniqueName(for: trimmed)
+        var storedOptions = options
+        storedOptions.presetName = resolvedName
+        let preset = UserPreset(name: resolvedName, options: storedOptions)
+        presets.append(preset)
+        persist()
+    }
+
+    func deletePreset(id: UUID) {
+        presets.removeAll { $0.id == id }
+        persist()
+    }
+
+    func preset(named name: String) -> UserPreset? {
+        presets.first { $0.name == name }
+    }
+
+    private func uniqueName(for proposed: String) -> String {
+        if presets.allSatisfy({ $0.name.caseInsensitiveCompare(proposed) != .orderedSame }) {
+            return proposed
+        }
+
+        var candidateIndex = 2
+        while true {
+            let candidate = "\(proposed) (\(candidateIndex))"
+            if presets.allSatisfy({ $0.name.caseInsensitiveCompare(candidate) != .orderedSame }) {
+                return candidate
+            }
+            candidateIndex += 1
+        }
+    }
+
+    private func load() {
+        guard let data = try? Data(contentsOf: fileURL),
+              let decoded = try? decoder.decode([UserPreset].self, from: data) else {
+            presets = []
+            return
+        }
+        presets = decoded
+    }
+
+    private func persist() {
+        do {
+            let directory = fileURL.deletingLastPathComponent()
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            let data = try encoder.encode(presets)
+            try data.write(to: fileURL, options: .atomic)
+        } catch {
+            assertionFailure("Failed to persist user presets: \(error)")
+        }
+    }
+
+    private static func defaultFileURL(fileManager: FileManager) -> URL {
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        return appSupport
+            .appendingPathComponent("ForgeFF", isDirectory: true)
+            .appendingPathComponent("user-presets.json", isDirectory: false)
+    }
+}

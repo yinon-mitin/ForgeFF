@@ -37,7 +37,10 @@ struct VideoJob: Identifiable, Codable, Equatable {
     var progress: Double
     var estimatedRemainingSeconds: Double?
     var metadata: MediaMetadata?
+    var inputFileSizeBytes: Int64?
     var errorMessage: String?
+    var errorDetails: String?
+    var commandLine: String?
     var result: JobResultSummary?
     var createdAt: Date
     var startedAt: Date?
@@ -59,7 +62,10 @@ struct VideoJob: Identifiable, Codable, Equatable {
         self.progress = 0
         self.estimatedRemainingSeconds = nil
         self.metadata = nil
+        self.inputFileSizeBytes = nil
         self.errorMessage = nil
+        self.errorDetails = nil
+        self.commandLine = nil
         self.result = nil
         self.createdAt = Date()
         self.startedAt = nil
@@ -68,6 +74,14 @@ struct VideoJob: Identifiable, Codable, Equatable {
 
     var sourceDisplayName: String {
         sourceURL.lastPathComponent
+    }
+
+    var errorSummary: String? {
+        errorMessage
+    }
+
+    var errorLog: String? {
+        errorDetails
     }
 
     var resolvedOutputFilename: String {

@@ -140,6 +140,42 @@ final class FFmpegCommandBuilderTests: XCTestCase {
         XCTAssertTrue(combined.contains("-ac 6"))
     }
 
+    func testBuildArgumentsMaps71AudioChannels() {
+        var options = ConversionOptions.default
+        options.audioChannels = 8
+        options.audioCodec = .aac
+
+        let job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/sample_71.mov"), options: options)
+        let arguments = FFmpegCommandBuilder.buildArguments(for: job, settings: .default)
+        let combined = arguments.joined(separator: " ")
+
+        XCTAssertTrue(combined.contains("-ac 8"))
+    }
+
+    func testBuildArgumentsAppendsValidatedCustomArguments() {
+        var options = ConversionOptions.default
+        options.customFFmpegArguments = "-movflags +faststart -max_muxing_queue_size 2048"
+        let job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/custom_args.mov"), options: options)
+
+        let arguments = FFmpegCommandBuilder.buildArguments(for: job, settings: .default)
+        let joined = arguments.joined(separator: " ")
+
+        XCTAssertTrue(joined.contains("-movflags +faststart"))
+        XCTAssertTrue(joined.contains("-max_muxing_queue_size 2048"))
+    }
+
+    func testCustomArgumentsBlockInputInjection() {
+        let validation = FFmpegCommandBuilder.validateCustomArguments("-i /tmp/other_input.mov -movflags +faststart")
+        XCTAssertEqual(validation.arguments, [])
+        XCTAssertNotNil(validation.errorMessage)
+    }
+
+    func testCustomArgumentsBlockPositionalOutputInjection() {
+        let validation = FFmpegCommandBuilder.validateCustomArguments("-movflags +faststart hacked-output.mp4")
+        XCTAssertEqual(validation.arguments, [])
+        XCTAssertNotNil(validation.errorMessage)
+    }
+
     func testBuildArgumentsUsesYOnlyWhenOverwriteEnabled() {
         var options = ConversionOptions.default
         options.audioBitrateKbps = 192
@@ -188,6 +224,8 @@ final class FFmpegCommandBuilderTests: XCTestCase {
 
     func testPresetMappingsForSoftwareCodecs() {
         let capabilities = FFmpegEncoderCapabilities(
+            supportsX264: true,
+            supportsX265: true,
             supportsVP9: true,
             supportsSVTAV1: true,
             supportsAOMAV1: true
@@ -260,6 +298,8 @@ final class FFmpegCommandBuilderTests: XCTestCase {
         let job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/av1.mkv"), options: options)
 
         let capabilities = FFmpegEncoderCapabilities(
+            supportsX264: true,
+            supportsX265: true,
             supportsVP9: true,
             supportsSVTAV1: false,
             supportsAOMAV1: true

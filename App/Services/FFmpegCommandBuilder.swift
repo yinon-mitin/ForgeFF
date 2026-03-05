@@ -1,6 +1,11 @@
 import Foundation
 
 enum FFmpegCommandBuilder {
+    struct CustomArgumentsValidation: Equatable {
+        let arguments: [String]
+        let errorMessage: String?
+    }
+
     enum Mode: Equatable {
         case singlePass
         case pass(Int, logPrefix: String)
@@ -69,6 +74,7 @@ enum FFmpegCommandBuilder {
 
         appendAudioEncoding(for: job, into: &arguments)
         appendSubtitleEncoding(for: job, into: &arguments)
+        arguments.append(contentsOf: validateCustomArguments(job.options.customFFmpegArguments).arguments)
 
         switch mode {
         case .singlePass:
@@ -83,6 +89,54 @@ enum FFmpegCommandBuilder {
         }
 
         return arguments
+    }
+
+    static func commandLine(executableURL: URL, arguments: [String]) -> String {
+        ([executableURL.path] + arguments).map(shellEscaped).joined(separator: " ")
+    }
+
+    static func validateCustomArguments(_ rawValue: String) -> CustomArgumentsValidation {
+        let tokens = splitCommandLine(rawValue)
+        guard !tokens.isEmpty else {
+            return CustomArgumentsValidation(arguments: [], errorMessage: nil)
+        }
+
+        let disallowedFlags: Set<String> = [
+            "-i", "-filter_complex_script", "-passlogfile", "-report", "-stdin"
+        ]
+        let disallowedPrefixFlags: [String] = [
+            "-i=", "-filter_complex_script=", "-passlogfile=", "-report="
+        ]
+
+        var sanitized = [String]()
+        var previousFlagAllowsValue = false
+
+        for token in tokens {
+            if token.hasPrefix("-") {
+                if disallowedFlags.contains(token) || disallowedPrefixFlags.contains(where: { token.hasPrefix($0) }) {
+                    return CustomArgumentsValidation(
+                        arguments: [],
+                        errorMessage: "Custom arguments cannot set input/output paths or script file paths."
+                    )
+                }
+                previousFlagAllowsValue = true
+                sanitized.append(token)
+                continue
+            }
+
+            if previousFlagAllowsValue {
+                sanitized.append(token)
+                previousFlagAllowsValue = false
+                continue
+            }
+
+            return CustomArgumentsValidation(
+                arguments: [],
+                errorMessage: "Custom arguments cannot include standalone positional paths or output names."
+            )
+        }
+
+        return CustomArgumentsValidation(arguments: sanitized, errorMessage: nil)
     }
 
     private static func appendVideoEncoding(
@@ -155,7 +209,7 @@ enum FFmpegCommandBuilder {
             arguments.append(contentsOf: ["-b:a", "\(bitrate)k"])
         }
 
-        if let channels = job.options.audioChannels, channels > 0 {
+        if let channels = resolvedAudioChannels(for: job.options), channels > 0 {
             arguments.append(contentsOf: ["-ac", "\(channels)"])
         }
     }
@@ -374,5 +428,66 @@ enum FFmpegCommandBuilder {
         }
 
         return candidate
+    }
+
+    private static func resolvedAudioChannels(for options: ConversionOptions) -> Int? {
+        guard options.audioCodec != .copy else { return nil }
+        guard let requested = options.audioChannels, requested > 0 else { return nil }
+        if options.audioCodec == .mp3, requested > 2 {
+            return 2
+        }
+        return requested
+    }
+
+    private static func splitCommandLine(_ rawValue: String) -> [String] {
+        var tokens = [String]()
+        var current = ""
+        var quoteCharacter: Character?
+        var escaping = false
+
+        for character in rawValue {
+            if escaping {
+                current.append(character)
+                escaping = false
+                continue
+            }
+            if character == "\\" {
+                escaping = true
+                continue
+            }
+            if let openQuote = quoteCharacter {
+                if character == openQuote {
+                    quoteCharacter = nil
+                } else {
+                    current.append(character)
+                }
+                continue
+            }
+            if character == "\"" || character == "'" {
+                quoteCharacter = character
+                continue
+            }
+            if character.isWhitespace {
+                if !current.isEmpty {
+                    tokens.append(current)
+                    current = ""
+                }
+            } else {
+                current.append(character)
+            }
+        }
+
+        if !current.isEmpty {
+            tokens.append(current)
+        }
+        return tokens
+    }
+
+    private static func shellEscaped(_ token: String) -> String {
+        if token.rangeOfCharacter(from: .whitespacesAndNewlines) == nil &&
+            !token.contains("\"") && !token.contains("'") {
+            return token
+        }
+        return "'" + token.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }

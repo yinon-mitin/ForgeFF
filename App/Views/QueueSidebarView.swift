@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct QueueListView: View {
@@ -9,6 +10,7 @@ struct QueueListView: View {
     let onAddFolder: () -> Void
 
     @State private var isEmptyChoicePopoverPresented = false
+    @State private var expandedDetailJobIDs = Set<UUID>()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,14 +22,31 @@ struct QueueListView: View {
                         QueueRowView(
                             job: job,
                             isSelected: viewModel.selectedJobIDs.contains(job.id),
+                            isDetailsExpanded: Binding(
+                                get: { expandedDetailJobIDs.contains(job.id) },
+                                set: { isExpanded in
+                                    if isExpanded {
+                                        expandedDetailJobIDs.insert(job.id)
+                                    } else {
+                                        expandedDetailJobIDs.remove(job.id)
+                                    }
+                                }
+                            ),
                             onReveal: { queueStore.revealOutput(for: job.id) },
                             onRetry: {
                                 queueStore.retry(jobID: job.id)
                                 viewModel.refreshDraftOptions()
                             },
                             onRemove: {
-                                queueStore.remove(jobIDs: [job.id])
-                                viewModel.selectedJobIDs.remove(job.id)
+                                let idsToRemove: Set<UUID>
+                                if !viewModel.selectedJobIDs.isEmpty, viewModel.selectedJobIDs.contains(job.id) {
+                                    idsToRemove = viewModel.selectedJobIDs
+                                } else {
+                                    idsToRemove = [job.id]
+                                    viewModel.selectedJobIDs = [job.id]
+                                }
+                                queueStore.remove(jobIDs: idsToRemove)
+                                viewModel.selectedJobIDs.subtract(idsToRemove)
                                 viewModel.refreshDraftOptions()
                             },
                             onCancel: { queueStore.cancel(jobID: job.id) }
@@ -97,6 +116,7 @@ struct QueueListView: View {
 private struct QueueRowView: View {
     let job: VideoJob
     let isSelected: Bool
+    @Binding var isDetailsExpanded: Bool
     let onReveal: () -> Void
     let onRetry: () -> Void
     let onRemove: () -> Void
@@ -126,15 +146,29 @@ private struct QueueRowView: View {
                         .clipShape(Capsule())
                 }
 
-                Text(job.status.rawValue.capitalized)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(statusColor)
+                if job.status == .failed {
+                    Text("Failed")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.red.opacity(0.12))
+                        .clipShape(Capsule())
+                } else {
+                    Text(job.status.rawValue.capitalized)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(statusColor)
+                }
             }
 
             ProgressView(value: job.progress)
                 .opacity(job.status == .completed ? 0.35 : 1)
 
             HStack(spacing: 10) {
+                Text("Input \(FileSizeFormatterUtil.string(from: job.inputFileSizeBytes ?? job.metadata?.fileSizeBytes))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 if let outputSize = job.result?.outputFileSize {
                     Text(outputSummary(outputSize: outputSize))
                         .font(.caption)
@@ -143,7 +177,7 @@ private struct QueueRowView: View {
                     Text("ETA \(etaString(eta))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                } else if let message = job.errorMessage, !message.isEmpty {
+                } else if let message = job.errorSummary, !message.isEmpty {
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -155,20 +189,71 @@ private struct QueueRowView: View {
                 if job.status == .running {
                     Button("Cancel", action: onCancel)
                         .buttonStyle(.link)
+                        .focusable(false)
                 }
 
                 if job.status == .completed {
                     Button("Reveal", action: onReveal)
                         .buttonStyle(.link)
+                        .focusable(false)
                 }
 
                 if job.status == .failed || job.status == .cancelled {
                     Button("Retry", action: onRetry)
                         .buttonStyle(.link)
+                        .focusable(false)
                 }
 
                 Button("Remove", role: .destructive, action: onRemove)
                     .buttonStyle(.link)
+                    .focusable(false)
+            }
+
+            if job.status == .failed || job.status == .cancelled {
+                DisclosureGroup("Details", isExpanded: $isDetailsExpanded) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let details = job.errorLog, !details.isEmpty {
+                            ScrollView(.vertical) {
+                                Text(details)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 160)
+                        } else {
+                            Text("No details available.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if let commandLine = job.commandLine, !commandLine.isEmpty {
+                            ScrollView(.horizontal) {
+                                Text(commandLine)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 48)
+                        }
+
+                        HStack(spacing: 10) {
+                            if let details = job.errorLog, !details.isEmpty {
+                                Button("Copy error") {
+                                    copyToPasteboard(details)
+                                }
+                                .buttonStyle(.link)
+                            }
+                            if let commandLine = job.commandLine, !commandLine.isEmpty {
+                                Button("Copy command") {
+                                    copyToPasteboard(commandLine)
+                                }
+                                .buttonStyle(.link)
+                            }
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+                .font(.caption)
             }
         }
         .padding(.vertical, 6)
@@ -254,5 +339,11 @@ private struct QueueRowView: View {
         let renderedDelta = formatter.string(fromByteCount: abs(delta))
         let sign = delta <= 0 ? "-" : "+"
         return "\(renderedOutput) (\(sign)\(renderedDelta))"
+    }
+
+    private func copyToPasteboard(_ value: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(value, forType: .string)
     }
 }

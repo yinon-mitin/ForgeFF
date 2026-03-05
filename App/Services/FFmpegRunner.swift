@@ -10,17 +10,35 @@ struct FFmpegProgress {
 
 enum FFmpegRunnerError: LocalizedError {
     case missingBinary
-    case processFailed(String)
+    case processFailed(summary: String, details: String, commandLine: String)
     case cancelled
 
     var errorDescription: String? {
         switch self {
         case .missingBinary:
             return "FFmpeg is not configured. Set the ffmpeg binary path in Settings."
-        case let .processFailed(message):
-            return message
+        case let .processFailed(summary, _, _):
+            return summary
         case .cancelled:
             return "The conversion was cancelled."
+        }
+    }
+
+    var details: String? {
+        switch self {
+        case let .processFailed(_, details, _):
+            return details
+        default:
+            return nil
+        }
+    }
+
+    var commandLine: String? {
+        switch self {
+        case let .processFailed(_, _, commandLine):
+            return commandLine
+        default:
+            return nil
         }
     }
 }
@@ -34,7 +52,7 @@ final class FFmpegRunner {
         ffmpegURL: URL?,
         settings: AppSettings,
         capabilities: FFmpegEncoderCapabilities = .none,
-        progress: @escaping (FFmpegProgress) -> Void
+        progress: @MainActor @escaping (FFmpegProgress) -> Void
     ) async throws -> JobResultSummary {
         guard let executableURL = ffmpegURL else {
             throw FFmpegRunnerError.missingBinary
@@ -50,10 +68,13 @@ final class FFmpegRunner {
 
         let startDate = Date()
         var lastSpeed: Double?
+        let arguments = FFmpegCommandBuilder.buildArguments(for: job, settings: settings, capabilities: capabilities)
+        let commandLine = FFmpegCommandBuilder.commandLine(executableURL: executableURL, arguments: arguments)
         let finalSpeed = try await execute(
             executableURL: executableURL,
-            arguments: FFmpegCommandBuilder.buildArguments(for: job, settings: settings, capabilities: capabilities),
+            arguments: arguments,
             totalDuration: job.metadata?.durationSeconds,
+            commandLine: commandLine,
             progress: progress
         ) { update in
             lastSpeed = update.speed
@@ -89,7 +110,8 @@ final class FFmpegRunner {
         executableURL: URL,
         arguments: [String],
         totalDuration: Double?,
-        progress: @escaping (FFmpegProgress) -> Void,
+        commandLine: String,
+        progress: @MainActor @escaping (FFmpegProgress) -> Void,
         progressTap: @escaping (FFmpegProgress) -> Void
     ) async throws -> Double? {
         let process = Process()
@@ -111,8 +133,10 @@ final class FFmpegRunner {
             guard let text = String(data: data, encoding: .utf8) else { return }
             for line in text.split(whereSeparator: \.isNewline) {
                 guard let parsed = Self.parseProgress(line: String(line), totalDuration: totalDuration) else { continue }
-                progress(parsed)
                 progressTap(parsed)
+                Task { @MainActor in
+                    progress(parsed)
+                }
             }
         }
 
@@ -129,8 +153,15 @@ final class FFmpegRunner {
                 }
 
                 guard process.terminationStatus == 0 else {
-                    let message = String(data: accumulatedError.data, encoding: .utf8) ?? "FFmpeg exited with \(process.terminationStatus)."
-                    continuation.resume(throwing: FFmpegRunnerError.processFailed(message))
+                    let stderrOutput = String(data: accumulatedError.data, encoding: .utf8) ?? "FFmpeg exited with \(process.terminationStatus)."
+                    let summary = Self.errorSummary(from: stderrOutput)
+                    continuation.resume(
+                        throwing: FFmpegRunnerError.processFailed(
+                            summary: summary,
+                            details: stderrOutput,
+                            commandLine: commandLine
+                        )
+                    )
                     return
                 }
 
@@ -182,11 +213,24 @@ final class FFmpegRunner {
             .compactMap(parseSpeed)
             .first
     }
+
+    private static func errorSummary(from stderr: String) -> String {
+        let lines = stderr
+            .split(whereSeparator: \.isNewline)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if let specific = lines.reversed().first(where: { $0.lowercased().contains("error") }) {
+            return specific
+        }
+        return lines.last ?? "FFmpeg failed with no error output."
+    }
 }
 
 private final class SynchronizedDataBuffer {
     private let lock = NSLock()
     private var storage = Data()
+    private let maxBytes = 200_000
 
     var data: Data {
         lock.lock()
@@ -197,6 +241,9 @@ private final class SynchronizedDataBuffer {
     func append(_ data: Data) {
         lock.lock()
         storage.append(data)
+        if storage.count > maxBytes {
+            storage = storage.suffix(maxBytes)
+        }
         lock.unlock()
     }
 }

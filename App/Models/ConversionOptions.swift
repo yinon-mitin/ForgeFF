@@ -363,18 +363,41 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
             audioCodec: .aac,
             quality: .better,
             enableHardwareAcceleration: false
-        ),
-        ConversionPreset(
-            name: "Custom (Simple)",
-            summary: "Tune container, codec, and quality.",
-            tradeoff: "More control, still beginner-safe.",
-            container: .mp4,
-            videoCodec: .h264,
-            audioCodec: .aac,
-            quality: .balanced,
-            enableHardwareAcceleration: true
         )
     ]
+
+    static let custom = ConversionPreset(
+        name: "Custom",
+        summary: "Manual tweaks are active.",
+        tradeoff: "Your current settings differ from saved presets.",
+        container: .mp4,
+        videoCodec: .h264,
+        audioCodec: .aac,
+        quality: .balanced,
+        enableHardwareAcceleration: true
+    )
+}
+
+struct UserPreset: Codable, Identifiable {
+    let id: UUID
+    var name: String
+    var options: ConversionOptions
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        options: ConversionOptions,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.options = options
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
 }
 
 struct ConversionOptions: Codable, Equatable {
@@ -403,6 +426,7 @@ struct ConversionOptions: Codable, Equatable {
     var audioBitrateKbps: Int?
     var sampleRate: Int?
     var audioChannels: Int?
+    var customFFmpegArguments: String
 
     static let `default` = ConversionOptions(
         presetName: ConversionPreset.builtIns[0].name,
@@ -427,7 +451,8 @@ struct ConversionOptions: Codable, Equatable {
         videoBitrateKbps: nil,
         audioBitrateKbps: nil,
         sampleRate: nil,
-        audioChannels: nil
+        audioChannels: nil,
+        customFFmpegArguments: ""
     )
 
     mutating func apply(preset: ConversionPreset) {
@@ -438,16 +463,24 @@ struct ConversionOptions: Codable, Equatable {
         audioCodec = preset.audioCodec
         qualityProfile = preset.quality
         useHardwareAcceleration = preset.enableHardwareAcceleration
+        resolutionOverride = .preserve
+        frameRateOption = .keep
+        customFrameRate = nil
+        audioBitrateKbps = nil
+        audioChannels = nil
+        sampleRate = nil
+        removeMetadata = false
+        removeChapters = false
+        enableHDRToSDR = false
+        toneMapMode = .hable
         outputTemplate = "{name}_{preset}"
         subtitleMode = .keep
         removeEmbeddedSubtitles = false
         subtitleAttachments = []
+        customFFmpegArguments = ""
+        videoBitrateKbps = nil
 
         if preset.kind == .audioOnly {
-            resolutionOverride = .preserve
-            frameRateOption = .keep
-            customFrameRate = nil
-            enableHDRToSDR = false
             useHardwareAcceleration = false
         }
     }

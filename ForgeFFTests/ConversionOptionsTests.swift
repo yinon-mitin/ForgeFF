@@ -51,3 +51,103 @@ final class ConversionOptionsTests: XCTestCase {
         XCTAssertEqual(externalResult.attachmentURL, previous)
     }
 }
+
+@MainActor
+final class PresetBehaviorTests: XCTestCase {
+    private func makeViewModel(fileURL: URL) -> QueueViewModel {
+        let settings = SettingsStore(pathDetector: FFmpegPathDetector())
+        let history = HistoryStore()
+        let queueStore = JobQueueStore(settingsStore: settings, historyStore: history)
+        let userPresetStore = UserPresetStore(fileURL: fileURL)
+        return QueueViewModel(queueStore: queueStore, userPresetStore: userPresetStore)
+    }
+
+    func testManualQualityChangeSwitchesPresetToCustom() {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("json")
+        let viewModel = makeViewModel(fileURL: fileURL)
+        guard let preset = ConversionPreset.builtIns.first else {
+            XCTFail("Missing built-in presets")
+            return
+        }
+
+        viewModel.selectPreset(preset)
+        XCTAssertEqual(viewModel.draftOptions.presetName, preset.name)
+
+        viewModel.updateOptions { $0.qualityProfile = .better }
+        XCTAssertEqual(viewModel.draftOptions.presetName, ConversionPreset.custom.name)
+    }
+
+    func testManualResolutionCustomChangeSwitchesPresetToCustom() {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("json")
+        let viewModel = makeViewModel(fileURL: fileURL)
+        guard let preset = ConversionPreset.builtIns.first else {
+            XCTFail("Missing built-in presets")
+            return
+        }
+
+        viewModel.selectPreset(preset)
+        viewModel.updateOptions { $0.resolutionOverride = .custom(width: 1440, height: 900) }
+
+        XCTAssertEqual(viewModel.draftOptions.presetName, ConversionPreset.custom.name)
+    }
+
+    func testProgrammaticPresetApplyDoesNotSwitchToCustom() {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("json")
+        let viewModel = makeViewModel(fileURL: fileURL)
+        guard ConversionPreset.builtIns.count > 1 else {
+            XCTFail("Need multiple built-in presets")
+            return
+        }
+
+        let preset = ConversionPreset.builtIns[1]
+        viewModel.selectPreset(preset)
+        XCTAssertEqual(viewModel.draftOptions.presetName, preset.name)
+    }
+
+    func testUserPresetStorePersistsAndDeletes() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let fileURL = tempDirectory.appendingPathComponent("user-presets.json")
+
+        let store = UserPresetStore(fileURL: fileURL)
+        XCTAssertEqual(store.presets.count, 0)
+
+        var options = ConversionOptions.default
+        options.qualityProfile = .better
+        store.savePreset(name: "My HQ Preset", options: options)
+        XCTAssertEqual(store.presets.count, 1)
+
+        let reloaded = UserPresetStore(fileURL: fileURL)
+        XCTAssertEqual(reloaded.presets.count, 1)
+
+        if let id = reloaded.presets.first?.id {
+            reloaded.deletePreset(id: id)
+        }
+        XCTAssertEqual(reloaded.presets.count, 0)
+    }
+
+    func testDeletingSelectedUserPresetFallsBackToCustom() {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("json")
+        let viewModel = makeViewModel(fileURL: fileURL)
+
+        viewModel.saveCurrentAsUserPreset(named: "Temp User Preset")
+        guard let preset = viewModel.userPresets.first else {
+            XCTFail("Expected saved user preset")
+            return
+        }
+        viewModel.selectUserPreset(preset)
+        XCTAssertEqual(viewModel.draftOptions.presetName, preset.name)
+
+        viewModel.deleteUserPreset(id: preset.id)
+        XCTAssertEqual(viewModel.draftOptions.presetName, ConversionPreset.custom.name)
+    }
+}

@@ -5,6 +5,7 @@ final class AppCommandHandler: ObservableObject {
     var onAddFiles: () -> Void = {}
     var onAddFolder: () -> Void = {}
     var onStartOrResume: () -> Void = {}
+    var onToggleStartPause: () -> Void = {}
     var onCancelQueue: () -> Void = {}
     var onRemoveSelected: () -> Void = {}
     var onClearQueue: () -> Void = {}
@@ -13,6 +14,7 @@ final class AppCommandHandler: ObservableObject {
     func triggerAddFiles() { onAddFiles() }
     func triggerAddFolder() { onAddFolder() }
     func triggerStartOrResume() { onStartOrResume() }
+    func triggerToggleStartPause() { onToggleStartPause() }
     func triggerCancelQueue() { onCancelQueue() }
     func triggerRemoveSelected() { onRemoveSelected() }
     func triggerClearQueue() { onClearQueue() }

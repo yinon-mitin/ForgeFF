@@ -30,6 +30,8 @@ final class FFmpegPathDetectorTests: XCTestCase {
         """
 
         let capabilities = FFmpegEncoderDiscovery.parseEncodersOutput(output)
+        XCTAssertTrue(capabilities.supportsX264)
+        XCTAssertFalse(capabilities.supportsX265)
         XCTAssertTrue(capabilities.supportsVP9)
         XCTAssertTrue(capabilities.supportsSVTAV1)
         XCTAssertFalse(capabilities.supportsAOMAV1)

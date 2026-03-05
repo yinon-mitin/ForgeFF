@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -12,11 +13,16 @@ struct MainWindowView: View {
     @State private var isFileImporterPresented = false
     @State private var isDropTargeted = false
     @State private var isClearConfirmationPresented = false
+    @State private var splitViewVisibility: NavigationSplitViewVisibility = .all
+    private let logger = Logger(subsystem: "com.yinonmitin.ForgeFF", category: "drop")
 
     var body: some View {
-        NavigationSplitView {
-            PresetOptionsPanelView(viewModel: viewModel)
-                .frame(minWidth: 300, idealWidth: 320)
+        NavigationSplitView(columnVisibility: $splitViewVisibility) {
+            PresetOptionsPanelView(
+                viewModel: viewModel,
+                isSidebarVisible: splitViewVisibility != .detailOnly
+            )
+                .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 380)
         } detail: {
             VStack(spacing: 0) {
                 QueueListView(
@@ -25,7 +31,16 @@ struct MainWindowView: View {
                     onAddFiles: { isFileImporterPresented = true },
                     onAddFolder: chooseFolder
                 )
-                .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isDropTargeted, perform: handleDrop)
+                .onDrop(
+                    of: [
+                        UTType.fileURL.identifier,
+                        UTType.movie.identifier,
+                        UTType.video.identifier,
+                        UTType.audio.identifier
+                    ],
+                    isTargeted: $isDropTargeted,
+                    perform: handleDrop
+                )
                 Divider()
                 footer
             }
@@ -37,7 +52,7 @@ struct MainWindowView: View {
         }
         .fileImporter(
             isPresented: $isFileImporterPresented,
-            allowedContentTypes: [.movie, .mpeg4Movie, .quickTimeMovie],
+            allowedContentTypes: JobQueueStore.supportedImportContentTypes,
             allowsMultipleSelection: true
         ) { result in
             if case let .success(urls) = result {
@@ -48,6 +63,7 @@ struct MainWindowView: View {
         .confirmationDialog("Clear Queue", isPresented: $isClearConfirmationPresented, titleVisibility: .visible) {
             Button("Clear only queued items") {
                 queueStore.clearQueuedItems()
+                viewModel.selectedJobIDs = viewModel.selectedJobIDs.intersection(Set(queueStore.jobs.map(\.id)))
                 viewModel.refreshDraftOptions()
             }
             Button("Clear everything (queued + completed + failed)") {
@@ -93,30 +109,41 @@ struct MainWindowView: View {
                 }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
             }
+            .focusable(false)
 
             Button("Output Folder") {
                 queueStore.chooseOutputDirectory()
             }
+            .focusable(false)
 
-            Button(queueStore.isQueuePaused ? "Resume" : "Start") {
-                queueStore.startQueue()
+            Button(queueStore.startButtonTitle) {
+                queueStore.startOrResume(selectedJobIDs: viewModel.selectedJobIDs)
             }
-            .disabled(!settingsStore.hasRequiredBinaries || viewModel.hasInvalidCustomInputs)
+            .disabled(
+                !settingsStore.hasRequiredBinaries ||
+                !queueStore.canStartOrResume ||
+                viewModel.hasInvalidCustomInputs ||
+                FFmpegCommandBuilder.validateCustomArguments(viewModel.draftOptions.customFFmpegArguments).errorMessage != nil
+            )
+            .focusable(false)
 
             Button("Pause") {
                 queueStore.pauseCurrentJob()
             }
             .disabled(!queueStore.isRunning)
+            .focusable(false)
 
             Button("Cancel") {
-                queueStore.cancelCurrentJob()
+                queueStore.cancelCurrentJob(selectedJobIDs: viewModel.selectedJobIDs)
             }
-            .disabled(!queueStore.isRunning && !queueStore.isQueuePaused)
+            .disabled(!queueStore.canCancel(selectedJobIDs: viewModel.selectedJobIDs))
+            .focusable(false)
 
             Button("Clear") {
                 isClearConfirmationPresented = true
             }
             .disabled(!queueStore.hasClearableQueueItems && !queueStore.hasCompletedResults)
+            .focusable(false)
         }
 
         ToolbarItem(placement: .automatic) {
@@ -140,6 +167,7 @@ struct MainWindowView: View {
             Text("Processing: \(summary.processing)")
             Text("Done: \(summary.done)")
             Text("Failed: \(summary.failed)")
+            Text("Input: \(FileSizeFormatterUtil.string(from: summary.totalInputSizeBytes))")
             Spacer()
         }
         .font(.callout)
@@ -152,8 +180,15 @@ struct MainWindowView: View {
     private func wireCommandHandlers() {
         commandHandler.onAddFiles = { isFileImporterPresented = true }
         commandHandler.onAddFolder = { chooseFolder() }
-        commandHandler.onStartOrResume = { queueStore.startQueue() }
-        commandHandler.onCancelQueue = { queueStore.cancelCurrentJob() }
+        commandHandler.onStartOrResume = { queueStore.startOrResume(selectedJobIDs: viewModel.selectedJobIDs) }
+        commandHandler.onToggleStartPause = {
+            if queueStore.queueState == .running {
+                queueStore.pauseCurrentJob()
+            } else {
+                queueStore.startOrResume(selectedJobIDs: viewModel.selectedJobIDs)
+            }
+        }
+        commandHandler.onCancelQueue = { queueStore.cancelCurrentJob(selectedJobIDs: viewModel.selectedJobIDs) }
         commandHandler.onRemoveSelected = { viewModel.removeSelectedJobs() }
         commandHandler.onClearQueue = { isClearConfirmationPresented = true }
         commandHandler.onClearCompleted = { queueStore.clearCompletedResults() }
@@ -164,6 +199,7 @@ struct MainWindowView: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.folder]
         panel.prompt = "Add"
         if panel.runModal() == .OK, let url = panel.url {
             queueStore.addFolder(url: url)
@@ -172,26 +208,72 @@ struct MainWindowView: View {
     }
 
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
-        for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                guard let data = item as? Data,
-                      let url = URL(dataRepresentation: data, relativeTo: nil) else {
-                    return
-                }
-
-                DispatchQueue.main.async {
-                    var isDirectory: ObjCBool = false
-                    FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
-                    if isDirectory.boolValue {
-                        queueStore.addFolder(url: url)
-                    } else {
-                        queueStore.addFiles(urls: [url])
+        for provider in providers {
+            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                    if let errorItem = item as? NSError {
+                        logger.error("Drop fileURL load error: \(errorItem.localizedDescription, privacy: .public)")
+                        return
                     }
-                    viewModel.refreshDraftOptions()
+                    guard let url = droppedURL(from: item) else {
+                        logger.error("Drop item could not be converted to file URL.")
+                        return
+                    }
+                    handleDroppedURL(url)
+                }
+                continue
+            }
+
+            if provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) {
+                provider.loadInPlaceFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { url, _, error in
+                    if let error {
+                        logger.error("Drop movie load error: \(error.localizedDescription, privacy: .public)")
+                    }
+                    guard let url else { return }
+                    handleDroppedURL(url)
+                }
+                continue
+            }
+
+            if provider.hasItemConformingToTypeIdentifier(UTType.audio.identifier) {
+                provider.loadInPlaceFileRepresentation(forTypeIdentifier: UTType.audio.identifier) { url, _, error in
+                    if let error {
+                        logger.error("Drop audio load error: \(error.localizedDescription, privacy: .public)")
+                    }
+                    guard let url else { return }
+                    handleDroppedURL(url)
                 }
             }
         }
         return true
+    }
+
+    private func droppedURL(from item: NSSecureCoding?) -> URL? {
+        if let data = item as? Data {
+            return URL(dataRepresentation: data, relativeTo: nil)
+        }
+        if let nsURL = item as? NSURL {
+            return nsURL as URL
+        }
+        if let string = item as? String,
+           let parsed = URL(string: string),
+           parsed.isFileURL {
+            return parsed
+        }
+        return nil
+    }
+
+    private func handleDroppedURL(_ url: URL) {
+        DispatchQueue.main.async {
+            var isDirectory: ObjCBool = false
+            FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            if isDirectory.boolValue {
+                queueStore.addFolder(url: url)
+            } else {
+                queueStore.addFiles(urls: [url])
+            }
+            viewModel.refreshDraftOptions()
+        }
     }
 
 }
