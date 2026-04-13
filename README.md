@@ -1,4 +1,12 @@
-# ForgeFF
+<p align="center" style="text-align: center">
+  <img src="https://github.com/user-attachments/assets/69c44ff9-208e-450f-a06f-f080c6028ddb" width="33%"><br/>
+</p>
+
+<h1 align="center">ForgeFF</h1>
+<p align="center">
+  Simple and powerful tool for converting video files.
+
+## Introduction
 
 ForgeFF is a native macOS batch media converter built around practical presets, a reliable queue, and the option to drop into detailed FFmpeg controls only when they are actually needed.
 
@@ -6,21 +14,13 @@ It is designed for people who want FFmpeg power without living in the terminal: 
 
 ## Demo
 
-> ![ForgeFF demo](https://github.com/yinon-mitin/ForgeFF/main/docs/screenshots/forgeff-demo.mp4)
+https://github.com/user-attachments/assets/de36a472-2231-4c34-a976-35b46f20f5e6
 
-## Screenshots
+## Side-Bar Screenshots
 
-![Settings-Presets](https://github.com/yinon-mitin/ForgeFF/main/docs/screenshots/Settings-1.png)
+<img height="335" alt="Settings-Presets" src="https://github.com/yinon-mitin/ForgeFF/blob/c89613d5d0e4f6d97e6b4e24b1817591e68e1421/docs/screenshots/Settings-1.png" /> <img height="335" alt="Settings-Video" src="https://github.com/yinon-mitin/ForgeFF/blob/c89613d5d0e4f6d97e6b4e24b1817591e68e1421/docs/screenshots/Settings-2.png" /> <img height="335" alt="Settings-Audio-and-Subtitles" src="https://github.com/yinon-mitin/ForgeFF/blob/c89613d5d0e4f6d97e6b4e24b1817591e68e1421/docs/screenshots/Settings-3.png" />
 
-![Settings-Video](https://github.com/yinon-mitin/ForgeFF/main/docs/screenshots/Settings-2.png)
-
-![Settings-Audio-and-Subtitles](https://github.com/yinon-mitin/ForgeFF/main/docs/screenshots/Settings-3.png)
-
-![Settings-Output-and-Cleanup](https://github.com/yinon-mitin/ForgeFF/main/docs/screenshots/Settings-4.png)
-
-![Settings-Advanced](https://github.com/yinon-mitin/ForgeFF/main/docs/screenshots/Settings-5.png)
-
-
+<img height="335" alt="Settings-Output-and-Cleanup" src="https://github.com/yinon-mitin/ForgeFF/blob/c89613d5d0e4f6d97e6b4e24b1817591e68e1421/docs/screenshots/Settings-4.png" /> <img height="335" alt="Settings-Advanced" src="https://github.com/yinon-mitin/ForgeFF/blob/c89613d5d0e4f6d97e6b4e24b1817591e68e1421/docs/screenshots/Settings-5.png" />
 
 
 ## Highlights
