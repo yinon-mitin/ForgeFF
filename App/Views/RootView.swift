@@ -1,5 +1,6 @@
 import AppKit
 import OSLog
+import Quartz
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -14,6 +15,8 @@ struct MainWindowView: View {
     @State private var isDropTargeted = false
     @State private var isClearConfirmationPresented = false
     @State private var splitViewVisibility: NavigationSplitViewVisibility = .all
+    @State private var quickLookKeyMonitor: Any?
+    @StateObject private var quickLookController = QueueQuickLookController()
     private let logger = Logger(subsystem: "com.yinonmitin.ForgeFF", category: "drop")
 
     var body: some View {
@@ -92,6 +95,10 @@ struct MainWindowView: View {
         .onAppear {
             settingsStore.refreshBinaryDetection()
             wireCommandHandlers()
+            installQuickLookMonitorIfNeeded()
+        }
+        .onDisappear {
+            removeQuickLookMonitor()
         }
     }
 
@@ -109,41 +116,38 @@ struct MainWindowView: View {
                 }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
             }
-            .focusable(false)
 
             Button("Output Folder") {
                 queueStore.chooseOutputDirectory()
             }
-            .focusable(false)
 
-            Button(queueStore.startButtonTitle) {
+            Button(queueStore.startButtonTitle(selectedJobIDs: viewModel.selectedJobIDs)) {
                 queueStore.startOrResume(selectedJobIDs: viewModel.selectedJobIDs)
             }
             .disabled(
                 !settingsStore.hasRequiredBinaries ||
-                !queueStore.canStartOrResume ||
+                !queueStore.canStartOrResume(selectedJobIDs: viewModel.selectedJobIDs) ||
                 viewModel.hasInvalidCustomInputs ||
-                FFmpegCommandBuilder.validateCustomArguments(viewModel.draftOptions.customFFmpegArguments).errorMessage != nil
+                FFmpegCommandBuilder.validateCustomCommandTemplate(
+                    viewModel.draftOptions.effectiveCustomCommandTemplate,
+                    enabled: viewModel.draftOptions.isCustomCommandEnabled
+                ).errorMessage != nil
             )
-            .focusable(false)
 
             Button("Pause") {
                 queueStore.pauseCurrentJob()
             }
-            .disabled(!queueStore.isRunning)
-            .focusable(false)
+            .disabled(!queueStore.canPause)
 
             Button("Cancel") {
                 queueStore.cancelCurrentJob(selectedJobIDs: viewModel.selectedJobIDs)
             }
             .disabled(!queueStore.canCancel(selectedJobIDs: viewModel.selectedJobIDs))
-            .focusable(false)
 
             Button("Clear") {
                 isClearConfirmationPresented = true
             }
             .disabled(!queueStore.hasClearableQueueItems && !queueStore.hasCompletedResults)
-            .focusable(false)
         }
 
         ToolbarItem(placement: .automatic) {
@@ -155,7 +159,7 @@ struct MainWindowView: View {
                         .labelStyle(.iconOnly)
                         .foregroundStyle(.orange)
                 }
-                .help("FFmpeg/FFprobe not configured")
+                .help("FFmpeg or FFprobe is not configured. Choose them in Advanced if auto-detection misses them.")
             }
         }
     }
@@ -168,13 +172,21 @@ struct MainWindowView: View {
             Text("Done: \(summary.done)")
             Text("Failed: \(summary.failed)")
             Text("Input: \(FileSizeFormatterUtil.string(from: summary.totalInputSizeBytes))")
+            Text("Elapsed: \(queueStore.queueElapsedDisplay)")
+            if summary.failed > 0 {
+                Button("Retry Failed") {
+                    queueStore.retryFailedJobs()
+                    viewModel.refreshDraftOptions()
+                }
+                .buttonStyle(.link)
+            }
             Spacer()
         }
         .font(.callout)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private func wireCommandHandlers() {
@@ -276,6 +288,69 @@ struct MainWindowView: View {
         }
     }
 
+    private func installQuickLookMonitorIfNeeded() {
+        guard quickLookKeyMonitor == nil else { return }
+        quickLookKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 49 else { return event }
+            guard let window = NSApp.keyWindow, window.isKeyWindow else { return event }
+            guard !isEditingText(window.firstResponder) else { return event }
+            return presentQuickLookForSelection() ? nil : event
+        }
+    }
+
+    private func removeQuickLookMonitor() {
+        if let quickLookKeyMonitor {
+            NSEvent.removeMonitor(quickLookKeyMonitor)
+            self.quickLookKeyMonitor = nil
+        }
+    }
+
+    private func presentQuickLookForSelection() -> Bool {
+        let selectedCompletedJobs = queueStore.jobs.filter { job in
+            viewModel.selectedJobIDs.contains(job.id) && job.status == .completed
+        }
+
+        guard !selectedCompletedJobs.isEmpty else { return false }
+
+        let urls = selectedCompletedJobs.compactMap(\.result?.outputURL).filter {
+            FileManager.default.fileExists(atPath: $0.path)
+        }
+        guard !urls.isEmpty else {
+            queueStore.alertMessage = "Output file not found."
+            return true
+        }
+
+        quickLookController.present(urls: urls)
+        return true
+    }
+
+    private func isEditingText(_ responder: AnyObject?) -> Bool {
+        guard let textView = responder as? NSTextView else { return false }
+        return textView.isEditable
+    }
+
+}
+
+@MainActor
+private final class QueueQuickLookController: NSObject, ObservableObject, @preconcurrency QLPreviewPanelDataSource, @preconcurrency QLPreviewPanelDelegate {
+    private var previewItems: [NSURL] = []
+
+    func present(urls: [URL]) {
+        previewItems = urls.map { $0 as NSURL }
+        guard let panel = QLPreviewPanel.shared() else { return }
+        panel.dataSource = self
+        panel.delegate = self
+        panel.reloadData()
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int {
+        previewItems.count
+    }
+
+    func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> QLPreviewItem! {
+        previewItems[index]
+    }
 }
 
 private struct FFmpegSetupView: View {

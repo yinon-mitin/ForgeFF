@@ -126,6 +126,24 @@ enum QualityProfile: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum EncoderOption: String, Codable, CaseIterable, Identifiable {
+    case veryFast
+    case fast
+    case medium
+    case slow
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .veryFast: return "Very Fast"
+        case .fast: return "Fast"
+        case .medium: return "Medium"
+        case .slow: return "Slow"
+        }
+    }
+}
+
 enum FrameRateOption: String, Codable, CaseIterable, Identifiable {
     case keep
     case fps24
@@ -212,6 +230,11 @@ struct SubtitleAttachment: Codable, Hashable, Identifiable {
     var languageCode: String
 }
 
+struct ExternalAudioAttachment: Codable, Hashable, Identifiable {
+    var id = UUID()
+    var fileURL: URL
+}
+
 struct ConversionPreset: Codable, Hashable, Identifiable {
     enum Kind: String, Codable {
         case video
@@ -227,6 +250,7 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
     let videoCodec: VideoCodec?
     let audioCodec: AudioCodec
     let quality: QualityProfile
+    let encoderOption: EncoderOption
     let enableHardwareAcceleration: Bool
 
     init(
@@ -239,6 +263,7 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
         videoCodec: VideoCodec?,
         audioCodec: AudioCodec,
         quality: QualityProfile,
+        encoderOption: EncoderOption = .medium,
         enableHardwareAcceleration: Bool
     ) {
         self.id = id
@@ -250,6 +275,7 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
         self.videoCodec = videoCodec
         self.audioCodec = audioCodec
         self.quality = quality
+        self.encoderOption = encoderOption
         self.enableHardwareAcceleration = enableHardwareAcceleration
     }
 
@@ -262,6 +288,7 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
             videoCodec: .h264,
             audioCodec: .aac,
             quality: .smaller,
+            encoderOption: .veryFast,
             enableHardwareAcceleration: true
         ),
         ConversionPreset(
@@ -272,6 +299,7 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
             videoCodec: .h264,
             audioCodec: .aac,
             quality: .balanced,
+            encoderOption: .medium,
             enableHardwareAcceleration: true
         ),
         ConversionPreset(
@@ -282,6 +310,7 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
             videoCodec: .h264,
             audioCodec: .aac,
             quality: .better,
+            encoderOption: .slow,
             enableHardwareAcceleration: false
         ),
         ConversionPreset(
@@ -292,6 +321,7 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
             videoCodec: .hevc,
             audioCodec: .aac,
             quality: .smaller,
+            encoderOption: .veryFast,
             enableHardwareAcceleration: true
         ),
         ConversionPreset(
@@ -302,6 +332,7 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
             videoCodec: .hevc,
             audioCodec: .aac,
             quality: .balanced,
+            encoderOption: .medium,
             enableHardwareAcceleration: true
         ),
         ConversionPreset(
@@ -312,6 +343,7 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
             videoCodec: .hevc,
             audioCodec: .aac,
             quality: .better,
+            encoderOption: .slow,
             enableHardwareAcceleration: false
         ),
         ConversionPreset(
@@ -322,6 +354,7 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
             videoCodec: .vp9,
             audioCodec: .aac,
             quality: .balanced,
+            encoderOption: .medium,
             enableHardwareAcceleration: false
         ),
         ConversionPreset(
@@ -332,6 +365,7 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
             videoCodec: .vp9,
             audioCodec: .aac,
             quality: .better,
+            encoderOption: .slow,
             enableHardwareAcceleration: false
         ),
         ConversionPreset(
@@ -342,6 +376,7 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
             videoCodec: .av1,
             audioCodec: .aac,
             quality: .balanced,
+            encoderOption: .medium,
             enableHardwareAcceleration: false
         ),
         ConversionPreset(
@@ -352,6 +387,7 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
             videoCodec: .av1,
             audioCodec: .aac,
             quality: .better,
+            encoderOption: .slow,
             enableHardwareAcceleration: false
         ),
         ConversionPreset(
@@ -362,6 +398,7 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
             videoCodec: .proRes,
             audioCodec: .aac,
             quality: .better,
+            encoderOption: .medium,
             enableHardwareAcceleration: false
         )
     ]
@@ -374,6 +411,7 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
         videoCodec: .h264,
         audioCodec: .aac,
         quality: .balanced,
+        encoderOption: .medium,
         enableHardwareAcceleration: true
     )
 }
@@ -400,6 +438,24 @@ struct UserPreset: Codable, Identifiable {
     }
 }
 
+struct UserPresetArchive: Codable {
+    static let currentSchemaVersion = 1
+
+    let schemaVersion: Int
+    let exportedAt: Date
+    var presets: [UserPreset]
+
+    init(
+        schemaVersion: Int = UserPresetArchive.currentSchemaVersion,
+        exportedAt: Date = Date(),
+        presets: [UserPreset]
+    ) {
+        self.schemaVersion = schemaVersion
+        self.exportedAt = exportedAt
+        self.presets = presets
+    }
+}
+
 struct ConversionOptions: Codable, Equatable {
     var presetName: String
     var isAudioOnly: Bool
@@ -407,6 +463,7 @@ struct ConversionOptions: Codable, Equatable {
     var videoCodec: VideoCodec
     var audioCodec: AudioCodec
     var qualityProfile: QualityProfile
+    var encoderOption: EncoderOption?
     var resolutionOverride: ResolutionOverride
     var frameRateOption: FrameRateOption
     var customFrameRate: Double?
@@ -416,9 +473,11 @@ struct ConversionOptions: Codable, Equatable {
     var removeEmbeddedSubtitles: Bool
     var subtitleMode: SubtitleHandling?
     var subtitleAttachments: [SubtitleAttachment]
+    var externalAudioAttachments: [ExternalAudioAttachment]
     var enableHDRToSDR: Bool
     var toneMapMode: ToneMapMode
     var toneMapPeak: Double
+    var webOptimization: Bool
     var outputTemplate: String
 
     // Advanced sheet values.
@@ -426,7 +485,100 @@ struct ConversionOptions: Codable, Equatable {
     var audioBitrateKbps: Int?
     var sampleRate: Int?
     var audioChannels: Int?
-    var customFFmpegArguments: String
+    var isCustomCommandOverrideEnabled: Bool
+    var customCommandTemplate: String
+
+    private enum CodingKeys: String, CodingKey {
+        case presetName
+        case isAudioOnly
+        case container
+        case videoCodec
+        case audioCodec
+        case qualityProfile
+        case encoderOption
+        case resolutionOverride
+        case frameRateOption
+        case customFrameRate
+        case useHardwareAcceleration
+        case removeMetadata
+        case removeChapters
+        case removeEmbeddedSubtitles
+        case subtitleMode
+        case subtitleAttachments
+        case externalAudioAttachments
+        case externalAudioURL
+        case enableHDRToSDR
+        case toneMapMode
+        case toneMapPeak
+        case webOptimization
+        case outputTemplate
+        case videoBitrateKbps
+        case audioBitrateKbps
+        case sampleRate
+        case audioChannels
+        case isCustomCommandOverrideEnabled
+        case customCommandTemplate
+    }
+
+    init(
+        presetName: String,
+        isAudioOnly: Bool,
+        container: OutputContainer,
+        videoCodec: VideoCodec,
+        audioCodec: AudioCodec,
+        qualityProfile: QualityProfile,
+        encoderOption: EncoderOption?,
+        resolutionOverride: ResolutionOverride,
+        frameRateOption: FrameRateOption,
+        customFrameRate: Double?,
+        useHardwareAcceleration: Bool,
+        removeMetadata: Bool,
+        removeChapters: Bool,
+        removeEmbeddedSubtitles: Bool,
+        subtitleMode: SubtitleHandling?,
+        subtitleAttachments: [SubtitleAttachment],
+        externalAudioAttachments: [ExternalAudioAttachment],
+        enableHDRToSDR: Bool,
+        toneMapMode: ToneMapMode,
+        toneMapPeak: Double,
+        webOptimization: Bool,
+        outputTemplate: String,
+        videoBitrateKbps: Int?,
+        audioBitrateKbps: Int?,
+        sampleRate: Int?,
+        audioChannels: Int?,
+        isCustomCommandOverrideEnabled: Bool,
+        customCommandTemplate: String
+    ) {
+        self.presetName = presetName
+        self.isAudioOnly = isAudioOnly
+        self.container = container
+        self.videoCodec = videoCodec
+        self.audioCodec = audioCodec
+        self.qualityProfile = qualityProfile
+        self.encoderOption = encoderOption
+        self.resolutionOverride = resolutionOverride
+        self.frameRateOption = frameRateOption
+        self.customFrameRate = customFrameRate
+        self.useHardwareAcceleration = useHardwareAcceleration
+        self.removeMetadata = removeMetadata
+        self.removeChapters = removeChapters
+        self.removeEmbeddedSubtitles = removeEmbeddedSubtitles
+        self.subtitleMode = subtitleMode
+        self.subtitleAttachments = subtitleAttachments
+        self.externalAudioAttachments = externalAudioAttachments
+        self.enableHDRToSDR = enableHDRToSDR
+        self.toneMapMode = toneMapMode
+        self.toneMapPeak = toneMapPeak
+        self.webOptimization = webOptimization
+        self.outputTemplate = outputTemplate
+        self.videoBitrateKbps = videoBitrateKbps
+        self.audioBitrateKbps = audioBitrateKbps
+        self.sampleRate = sampleRate
+        self.audioChannels = audioChannels
+        self.isCustomCommandOverrideEnabled = isCustomCommandOverrideEnabled
+        self.customCommandTemplate = customCommandTemplate
+    }
 
     static let `default` = ConversionOptions(
         presetName: ConversionPreset.builtIns[0].name,
@@ -435,6 +587,7 @@ struct ConversionOptions: Codable, Equatable {
         videoCodec: .h264,
         audioCodec: .aac,
         qualityProfile: .balanced,
+        encoderOption: nil,
         resolutionOverride: .preserve,
         frameRateOption: .keep,
         customFrameRate: nil,
@@ -444,15 +597,18 @@ struct ConversionOptions: Codable, Equatable {
         removeEmbeddedSubtitles: false,
         subtitleMode: nil,
         subtitleAttachments: [],
+        externalAudioAttachments: [],
         enableHDRToSDR: false,
         toneMapMode: .hable,
         toneMapPeak: 1000,
+        webOptimization: false,
         outputTemplate: "{name}_{preset}",
         videoBitrateKbps: nil,
         audioBitrateKbps: nil,
         sampleRate: nil,
         audioChannels: nil,
-        customFFmpegArguments: ""
+        isCustomCommandOverrideEnabled: false,
+        customCommandTemplate: ""
     )
 
     mutating func apply(preset: ConversionPreset) {
@@ -462,6 +618,7 @@ struct ConversionOptions: Codable, Equatable {
         videoCodec = preset.videoCodec ?? .h264
         audioCodec = preset.audioCodec
         qualityProfile = preset.quality
+        encoderOption = preset.encoderOption
         useHardwareAcceleration = preset.enableHardwareAcceleration
         resolutionOverride = .preserve
         frameRateOption = .keep
@@ -473,11 +630,14 @@ struct ConversionOptions: Codable, Equatable {
         removeChapters = false
         enableHDRToSDR = false
         toneMapMode = .hable
+        webOptimization = false
         outputTemplate = "{name}_{preset}"
         subtitleMode = .keep
         removeEmbeddedSubtitles = false
         subtitleAttachments = []
-        customFFmpegArguments = ""
+        externalAudioAttachments = []
+        isCustomCommandOverrideEnabled = false
+        customCommandTemplate = ""
         videoBitrateKbps = nil
 
         if preset.kind == .audioOnly {
@@ -490,6 +650,13 @@ struct ConversionOptions: Codable, Equatable {
         return audioBitrateKbps
     }
 
+    var effectiveEncoderOption: EncoderOption {
+        encoderOption ?? Self.recommendedEncoderOption(
+            videoCodec: videoCodec,
+            qualityProfile: qualityProfile
+        )
+    }
+
     var effectiveSubtitleMode: SubtitleHandling {
         if let subtitleMode {
             return subtitleMode
@@ -498,6 +665,121 @@ struct ConversionOptions: Codable, Equatable {
             return .addExternal
         }
         return removeEmbeddedSubtitles ? .remove : .keep
+    }
+
+    var externalAudioURL: URL? {
+        get { externalAudioAttachments.first?.fileURL }
+        set {
+            externalAudioAttachments = newValue.map { [ExternalAudioAttachment(fileURL: $0)] } ?? []
+        }
+    }
+
+    var isWebOptimizationAvailable: Bool {
+        container == .mp4 || container == .mov
+    }
+
+    var isCustomCommandEnabled: Bool {
+        isCustomCommandOverrideEnabled
+    }
+
+    var effectiveCustomCommandTemplate: String {
+        customCommandTemplate
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = ConversionOptions.default
+
+        presetName = try container.decodeIfPresent(String.self, forKey: .presetName) ?? defaults.presetName
+        isAudioOnly = try container.decodeIfPresent(Bool.self, forKey: .isAudioOnly) ?? defaults.isAudioOnly
+        self.container = try container.decodeIfPresent(OutputContainer.self, forKey: .container) ?? defaults.container
+        videoCodec = try container.decodeIfPresent(VideoCodec.self, forKey: .videoCodec) ?? defaults.videoCodec
+        audioCodec = try container.decodeIfPresent(AudioCodec.self, forKey: .audioCodec) ?? defaults.audioCodec
+        qualityProfile = try container.decodeIfPresent(QualityProfile.self, forKey: .qualityProfile) ?? defaults.qualityProfile
+        encoderOption = try container.decodeIfPresent(EncoderOption.self, forKey: .encoderOption)
+        resolutionOverride = try container.decodeIfPresent(ResolutionOverride.self, forKey: .resolutionOverride) ?? defaults.resolutionOverride
+        frameRateOption = try container.decodeIfPresent(FrameRateOption.self, forKey: .frameRateOption) ?? defaults.frameRateOption
+        customFrameRate = try container.decodeIfPresent(Double.self, forKey: .customFrameRate)
+        useHardwareAcceleration = try container.decodeIfPresent(Bool.self, forKey: .useHardwareAcceleration) ?? defaults.useHardwareAcceleration
+        removeMetadata = try container.decodeIfPresent(Bool.self, forKey: .removeMetadata) ?? defaults.removeMetadata
+        removeChapters = try container.decodeIfPresent(Bool.self, forKey: .removeChapters) ?? defaults.removeChapters
+        removeEmbeddedSubtitles = try container.decodeIfPresent(Bool.self, forKey: .removeEmbeddedSubtitles) ?? defaults.removeEmbeddedSubtitles
+        subtitleMode = try container.decodeIfPresent(SubtitleHandling.self, forKey: .subtitleMode)
+        subtitleAttachments = try container.decodeIfPresent([SubtitleAttachment].self, forKey: .subtitleAttachments) ?? defaults.subtitleAttachments
+        if let attachments = try container.decodeIfPresent([ExternalAudioAttachment].self, forKey: .externalAudioAttachments) {
+            externalAudioAttachments = attachments
+        } else if let legacyExternalAudioURL = try container.decodeIfPresent(URL.self, forKey: .externalAudioURL) {
+            externalAudioAttachments = [ExternalAudioAttachment(fileURL: legacyExternalAudioURL)]
+        } else {
+            externalAudioAttachments = defaults.externalAudioAttachments
+        }
+        enableHDRToSDR = try container.decodeIfPresent(Bool.self, forKey: .enableHDRToSDR) ?? defaults.enableHDRToSDR
+        toneMapMode = try container.decodeIfPresent(ToneMapMode.self, forKey: .toneMapMode) ?? defaults.toneMapMode
+        toneMapPeak = try container.decodeIfPresent(Double.self, forKey: .toneMapPeak) ?? defaults.toneMapPeak
+        webOptimization = try container.decodeIfPresent(Bool.self, forKey: .webOptimization) ?? defaults.webOptimization
+        outputTemplate = try container.decodeIfPresent(String.self, forKey: .outputTemplate) ?? defaults.outputTemplate
+        videoBitrateKbps = try container.decodeIfPresent(Int.self, forKey: .videoBitrateKbps)
+        audioBitrateKbps = try container.decodeIfPresent(Int.self, forKey: .audioBitrateKbps)
+        sampleRate = try container.decodeIfPresent(Int.self, forKey: .sampleRate)
+        audioChannels = try container.decodeIfPresent(Int.self, forKey: .audioChannels)
+        isCustomCommandOverrideEnabled = try container.decodeIfPresent(Bool.self, forKey: .isCustomCommandOverrideEnabled) ?? defaults.isCustomCommandOverrideEnabled
+        customCommandTemplate = try container.decodeIfPresent(String.self, forKey: .customCommandTemplate) ?? defaults.customCommandTemplate
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(presetName, forKey: .presetName)
+        try container.encode(isAudioOnly, forKey: .isAudioOnly)
+        try container.encode(self.container, forKey: .container)
+        try container.encode(videoCodec, forKey: .videoCodec)
+        try container.encode(audioCodec, forKey: .audioCodec)
+        try container.encode(qualityProfile, forKey: .qualityProfile)
+        try container.encodeIfPresent(encoderOption, forKey: .encoderOption)
+        try container.encode(resolutionOverride, forKey: .resolutionOverride)
+        try container.encode(frameRateOption, forKey: .frameRateOption)
+        try container.encodeIfPresent(customFrameRate, forKey: .customFrameRate)
+        try container.encode(useHardwareAcceleration, forKey: .useHardwareAcceleration)
+        try container.encode(removeMetadata, forKey: .removeMetadata)
+        try container.encode(removeChapters, forKey: .removeChapters)
+        try container.encode(removeEmbeddedSubtitles, forKey: .removeEmbeddedSubtitles)
+        try container.encodeIfPresent(subtitleMode, forKey: .subtitleMode)
+        try container.encode(subtitleAttachments, forKey: .subtitleAttachments)
+        try container.encode(externalAudioAttachments, forKey: .externalAudioAttachments)
+        try container.encode(enableHDRToSDR, forKey: .enableHDRToSDR)
+        try container.encode(toneMapMode, forKey: .toneMapMode)
+        try container.encode(toneMapPeak, forKey: .toneMapPeak)
+        try container.encode(webOptimization, forKey: .webOptimization)
+        try container.encode(outputTemplate, forKey: .outputTemplate)
+        try container.encodeIfPresent(videoBitrateKbps, forKey: .videoBitrateKbps)
+        try container.encodeIfPresent(audioBitrateKbps, forKey: .audioBitrateKbps)
+        try container.encodeIfPresent(sampleRate, forKey: .sampleRate)
+        try container.encodeIfPresent(audioChannels, forKey: .audioChannels)
+        try container.encode(isCustomCommandOverrideEnabled, forKey: .isCustomCommandOverrideEnabled)
+        try container.encode(customCommandTemplate, forKey: .customCommandTemplate)
+    }
+}
+
+extension ConversionOptions {
+    static func recommendedEncoderOption(
+        videoCodec: VideoCodec,
+        qualityProfile: QualityProfile
+    ) -> EncoderOption {
+        switch videoCodec {
+        case .h264, .hevc:
+            switch qualityProfile {
+            case .smaller: return .veryFast
+            case .balanced: return .fast
+            case .better: return .slow
+            }
+        case .vp9, .av1:
+            switch qualityProfile {
+            case .smaller: return .fast
+            case .balanced: return .medium
+            case .better: return .slow
+            }
+        case .proRes:
+            return .medium
+        }
     }
 }
 

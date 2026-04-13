@@ -27,32 +27,26 @@ final class QueueViewModel: ObservableObject {
         userPresetStore.$presets
             .receive(on: DispatchQueue.main)
             .sink { [weak self] presets in
-                self?.userPresets = presets
+                guard let self else { return }
+                self.userPresets = presets
+                self.draftOptions = self.normalizedPresetReference(for: self.draftOptions)
             }
             .store(in: &cancellables)
+
+        self.draftOptions = normalizedPresetReference(for: self.draftOptions)
     }
 
     var activePreset: ConversionPreset {
-        if draftOptions.presetName == ConversionPreset.custom.name {
-            return ConversionPreset.custom
-        }
-        if let builtIn = ConversionPreset.builtIns.first(where: { $0.name == draftOptions.presetName }) {
-            return builtIn
-        }
-        if let user = userPresets.first(where: { $0.name == draftOptions.presetName }) {
-            return ConversionPreset(
-                name: user.name,
-                summary: "Saved user preset.",
-                tradeoff: "Applies your saved conversion configuration.",
-                kind: user.options.isAudioOnly ? .audioOnly : .video,
-                container: user.options.container,
-                videoCodec: user.options.isAudioOnly ? nil : user.options.videoCodec,
-                audioCodec: user.options.audioCodec,
-                quality: user.options.qualityProfile,
-                enableHardwareAcceleration: user.options.useHardwareAcceleration
-            )
-        }
-        return ConversionPreset.custom
+        referencedPreset ?? ConversionPreset.custom
+    }
+
+    var isUsingCustomPreset: Bool {
+        referencedPreset == nil && draftOptions.presetName == ConversionPreset.custom.name
+    }
+
+    var isPresetCustomized: Bool {
+        guard let presetOptions = referencedPresetOptions else { return false }
+        return controlledPresetState(presetOptions) != controlledPresetState(draftOptions)
     }
 
     var renamePreview: [UUID: String] {
@@ -66,7 +60,7 @@ final class QueueViewModel: ObservableObject {
     var isAdvancedModified: Bool {
         draftOptions.videoBitrateKbps != nil ||
         draftOptions.subtitleAttachments.contains(where: { $0.languageCode != "eng" }) ||
-        !draftOptions.customFFmpegArguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        draftOptions.isCustomCommandEnabled
     }
 
     var hasInvalidCustomInputs: Bool {
@@ -74,7 +68,7 @@ final class QueueViewModel: ObservableObject {
     }
 
     func refreshDraftOptions() {
-        draftOptions = queueStore.optionsForSelection(selectedJobIDs)
+        draftOptions = normalizedPresetReference(for: queueStore.optionsForSelection(selectedJobIDs))
     }
 
     func applyDraftOptions() {
@@ -83,7 +77,7 @@ final class QueueViewModel: ObservableObject {
 
     func selectPreset(_ preset: ConversionPreset) {
         isApplyingPreset = true
-        draftOptions = queueStore.applyPreset(preset, to: selectedJobIDs)
+        draftOptions = normalizedPresetReference(for: queueStore.applyPreset(preset, to: selectedJobIDs))
         isApplyingPreset = false
     }
 
@@ -92,7 +86,7 @@ final class QueueViewModel: ObservableObject {
         var options = preset.options
         options.presetName = preset.name
         queueStore.applyOptions(options, to: selectedJobIDs)
-        draftOptions = options
+        draftOptions = normalizedPresetReference(for: options)
         isApplyingPreset = false
     }
 
@@ -128,24 +122,31 @@ final class QueueViewModel: ObservableObject {
         userPresets = userPresetStore.presets
     }
 
+    func exportUserPresets(to url: URL) throws {
+        try userPresetStore.exportPresets(to: url)
+    }
+
+    func importUserPresets(from url: URL) throws {
+        try userPresetStore.importPresets(from: url)
+        userPresets = userPresetStore.presets
+    }
+
     func deleteUserPreset(id: UUID) {
         let deletedPreset = userPresets.first(where: { $0.id == id })
         userPresetStore.deletePreset(id: id)
         userPresets = userPresetStore.presets
         if draftOptions.presetName == deletedPreset?.name {
-            draftOptions.presetName = ConversionPreset.custom.name
+            var updated = draftOptions
+            updated.presetName = ConversionPreset.custom.name
+            draftOptions = updated
             applyDraftOptions()
         }
     }
 
     func updateOptions(_ mutate: (inout ConversionOptions) -> Void) {
-        let previous = draftOptions
         var updated = draftOptions
         mutate(&updated)
-        if shouldSwitchToCustom(previous: previous, updated: updated) {
-            updated.presetName = ConversionPreset.custom.name
-        }
-        draftOptions = updated
+        draftOptions = normalizedPresetReference(for: updated, preferredPresetName: draftOptions.presetName)
         applyDraftOptions()
     }
 
@@ -173,51 +174,175 @@ final class QueueViewModel: ObservableObject {
         }
     }
 
-    private func shouldSwitchToCustom(previous: ConversionOptions, updated: ConversionOptions) -> Bool {
-        guard !isApplyingPreset else { return false }
-        guard previous.presetName != ConversionPreset.custom.name else { return false }
-        return controlledPresetState(previous) != controlledPresetState(updated)
+    private var referencedPreset: ConversionPreset? {
+        if let explicitPreset = preset(named: draftOptions.presetName) {
+            return explicitPreset
+        }
+        guard let matchedPresetName = matchingPresetName(for: draftOptions) else {
+            return nil
+        }
+        return preset(named: matchedPresetName)
+    }
+
+    private var referencedPresetOptions: ConversionOptions? {
+        guard let preset = referencedPreset else { return nil }
+        return resolvedOptions(for: preset)
+    }
+
+    private func normalizedPresetReference(
+        for options: ConversionOptions,
+        preferredPresetName: String? = nil
+    ) -> ConversionOptions {
+        guard !isApplyingPreset else { return options }
+        var normalized = options
+
+        if let preferredPresetName,
+           preferredPresetName != ConversionPreset.custom.name,
+           preset(named: preferredPresetName) != nil {
+            normalized.presetName = preferredPresetName
+            return normalized
+        }
+
+        if let matchedPresetName = matchingPresetName(for: options) {
+            normalized.presetName = matchedPresetName
+        } else if preset(named: normalized.presetName) == nil {
+            normalized.presetName = ConversionPreset.custom.name
+        }
+
+        return normalized
+    }
+
+    private func matchingPresetName(for candidateOptions: ConversionOptions) -> String? {
+        let candidateState = controlledPresetState(candidateOptions)
+        for preset in ConversionPreset.builtIns {
+            if controlledPresetState(resolvedOptions(for: preset)) == candidateState {
+                return preset.name
+            }
+        }
+        for userPreset in userPresets where controlledPresetState(userPreset.options) == candidateState {
+            return userPreset.name
+        }
+        return nil
+    }
+
+    private func preset(named name: String) -> ConversionPreset? {
+        if let builtIn = ConversionPreset.builtIns.first(where: { $0.name == name }) {
+            return builtIn
+        }
+        if let user = userPresets.first(where: { $0.name == name }) {
+            return ConversionPreset(
+                name: user.name,
+                summary: "Saved user preset.",
+                tradeoff: "Applies your saved conversion configuration.",
+                kind: user.options.isAudioOnly ? .audioOnly : .video,
+                container: user.options.container,
+                videoCodec: user.options.isAudioOnly ? nil : user.options.videoCodec,
+                audioCodec: user.options.audioCodec,
+                quality: user.options.qualityProfile,
+                encoderOption: user.options.effectiveEncoderOption,
+                enableHardwareAcceleration: user.options.useHardwareAcceleration
+            )
+        }
+        return nil
+    }
+
+    private func resolvedOptions(for preset: ConversionPreset) -> ConversionOptions {
+        if let userPreset = userPresets.first(where: { $0.name == preset.name }) {
+            return userPreset.options
+        }
+
+        var options = ConversionOptions.default
+        options.apply(preset: preset)
+        return options
     }
 
     private func controlledPresetState(_ options: ConversionOptions) -> PresetControlledState {
-        PresetControlledState(
+        let usesCustomCommand = options.isCustomCommandEnabled
+        let normalizedAudioBitrate = options.audioCodec == .copy ? nil : options.effectiveAudioBitrateKbps
+        let normalizedAudioChannels = options.audioCodec == .copy ? nil : options.audioChannels
+        let normalizedSubtitleMode: SubtitleHandling? = {
+            guard !usesCustomCommand, !options.isAudioOnly else { return nil }
+            let effectiveMode = options.effectiveSubtitleMode
+            if effectiveMode == .addExternal, options.subtitleAttachments.isEmpty {
+                return .keep
+            }
+            return effectiveMode
+        }()
+        let normalizedSubtitleAttachmentKeys: [String] = {
+            guard normalizedSubtitleMode == .addExternal else { return [] }
+            return options.subtitleAttachments.map {
+                let normalizedLanguageCode = $0.languageCode
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                return "\($0.fileURL.standardizedFileURL.path)|\(normalizedLanguageCode.isEmpty ? "eng" : normalizedLanguageCode)"
+            }
+        }()
+        let normalizedHardwareAcceleration: Bool? = {
+            guard !usesCustomCommand, !options.isAudioOnly else { return nil }
+            switch options.videoCodec {
+            case .h264, .hevc:
+                return options.qualityProfile == .better ? nil : options.useHardwareAcceleration
+            case .proRes, .vp9, .av1:
+                return nil
+            }
+        }()
+
+        return PresetControlledState(
             container: options.container,
-            videoCodec: options.videoCodec,
-            qualityProfile: options.qualityProfile,
-            resolutionOverride: options.resolutionOverride,
-            frameRateOption: options.frameRateOption,
-            customFrameRate: options.customFrameRate,
-            audioCodec: options.audioCodec,
-            audioBitrateKbps: options.audioBitrateKbps,
-            audioChannels: options.audioChannels,
-            subtitleMode: options.effectiveSubtitleMode,
-            subtitleAttachmentKeys: options.subtitleAttachments.map {
-                "\($0.fileURL.path)|\($0.languageCode)"
-            },
-            removeMetadata: options.removeMetadata,
-            removeChapters: options.removeChapters,
-            enableHDRToSDR: options.enableHDRToSDR,
-            toneMapMode: options.toneMapMode,
-            useHardwareAcceleration: options.useHardwareAcceleration
+            outputTemplate: options.outputTemplate,
+            isCustomCommandEnabled: usesCustomCommand,
+            customCommandTemplate: usesCustomCommand ? options.effectiveCustomCommandTemplate : nil,
+            isAudioOnly: usesCustomCommand ? nil : options.isAudioOnly,
+            videoCodec: usesCustomCommand || options.isAudioOnly ? nil : options.videoCodec,
+            qualityProfile: usesCustomCommand || options.isAudioOnly ? nil : options.qualityProfile,
+            encoderOption: usesCustomCommand || options.isAudioOnly ? nil : options.effectiveEncoderOption,
+            resolutionOverride: usesCustomCommand || options.isAudioOnly ? nil : options.resolutionOverride,
+            frameRateOption: usesCustomCommand || options.isAudioOnly ? nil : options.frameRateOption,
+            customFrameRate: usesCustomCommand || options.isAudioOnly || options.frameRateOption != .custom
+                ? nil
+                : options.customFrameRate,
+            audioCodec: usesCustomCommand ? nil : options.audioCodec,
+            audioBitrateKbps: usesCustomCommand ? nil : normalizedAudioBitrate,
+            audioChannels: usesCustomCommand ? nil : normalizedAudioChannels,
+            subtitleMode: normalizedSubtitleMode,
+            subtitleAttachmentKeys: normalizedSubtitleAttachmentKeys,
+            externalAudioPaths: usesCustomCommand ? [] : options.externalAudioAttachments.map { $0.fileURL.standardizedFileURL.path },
+            removeMetadata: usesCustomCommand ? nil : options.removeMetadata,
+            removeChapters: usesCustomCommand ? nil : options.removeChapters,
+            webOptimization: usesCustomCommand || !options.isWebOptimizationAvailable ? nil : options.webOptimization,
+            enableHDRToSDR: usesCustomCommand || options.isAudioOnly ? nil : options.enableHDRToSDR,
+            toneMapMode: usesCustomCommand || options.isAudioOnly || !options.enableHDRToSDR ? nil : options.toneMapMode,
+            toneMapPeak: usesCustomCommand || options.isAudioOnly || !options.enableHDRToSDR ? nil : options.toneMapPeak,
+            useHardwareAcceleration: normalizedHardwareAcceleration,
+            videoBitrateKbps: usesCustomCommand || options.isAudioOnly ? nil : options.videoBitrateKbps
         )
     }
 }
 
 private struct PresetControlledState: Equatable {
     let container: OutputContainer
-    let videoCodec: VideoCodec
-    let qualityProfile: QualityProfile
-    let resolutionOverride: ResolutionOverride
-    let frameRateOption: FrameRateOption
+    let outputTemplate: String
+    let isCustomCommandEnabled: Bool
+    let customCommandTemplate: String?
+    let isAudioOnly: Bool?
+    let videoCodec: VideoCodec?
+    let qualityProfile: QualityProfile?
+    let encoderOption: EncoderOption?
+    let resolutionOverride: ResolutionOverride?
+    let frameRateOption: FrameRateOption?
     let customFrameRate: Double?
-    let audioCodec: AudioCodec
+    let audioCodec: AudioCodec?
     let audioBitrateKbps: Int?
     let audioChannels: Int?
-    let subtitleMode: SubtitleHandling
+    let subtitleMode: SubtitleHandling?
     let subtitleAttachmentKeys: [String]
-    let removeMetadata: Bool
-    let removeChapters: Bool
-    let enableHDRToSDR: Bool
-    let toneMapMode: ToneMapMode
-    let useHardwareAcceleration: Bool
+    let externalAudioPaths: [String]
+    let removeMetadata: Bool?
+    let removeChapters: Bool?
+    let webOptimization: Bool?
+    let enableHDRToSDR: Bool?
+    let toneMapMode: ToneMapMode?
+    let toneMapPeak: Double?
+    let useHardwareAcceleration: Bool?
+    let videoBitrateKbps: Int?
 }

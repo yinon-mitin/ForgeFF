@@ -6,6 +6,7 @@ struct ForgeFFApp: App {
     @StateObject private var historyStore: HistoryStore
     @StateObject private var userPresetStore: UserPresetStore
     @StateObject private var queueStore: JobQueueStore
+    @StateObject private var dockProgressController: DockProgressController
     @StateObject private var viewModel: QueueViewModel
     @StateObject private var commandHandler: AppCommandHandler
 
@@ -14,11 +15,13 @@ struct ForgeFFApp: App {
         let historyStore = HistoryStore()
         let userPresetStore = UserPresetStore()
         let queueStore = JobQueueStore(settingsStore: settingsStore, historyStore: historyStore)
+        let dockProgressController = DockProgressController(queueStore: queueStore)
         let commandHandler = AppCommandHandler()
         _settingsStore = StateObject(wrappedValue: settingsStore)
         _historyStore = StateObject(wrappedValue: historyStore)
         _userPresetStore = StateObject(wrappedValue: userPresetStore)
         _queueStore = StateObject(wrappedValue: queueStore)
+        _dockProgressController = StateObject(wrappedValue: dockProgressController)
         _viewModel = StateObject(wrappedValue: QueueViewModel(queueStore: queueStore, userPresetStore: userPresetStore))
         _commandHandler = StateObject(wrappedValue: commandHandler)
     }
@@ -31,16 +34,19 @@ struct ForgeFFApp: App {
                 .environmentObject(historyStore)
                 .environmentObject(queueStore)
                 .environmentObject(commandHandler)
+                .environmentObject(dockProgressController)
         }
         .defaultSize(width: 1100, height: 700)
         Window("About ForgeFF", id: "about-forgeff") {
             AboutForgeFFView()
-                .frame(minWidth: 440, minHeight: 240)
+                .frame(minWidth: 420, idealWidth: 460, minHeight: 280, idealHeight: 300)
         }
-        .windowResizability(.contentSize)
+        .defaultSize(width: 460, height: 300)
+        .windowResizability(.contentMinSize)
         .commands {
             ForgeFFCommands(
                 queueStore: queueStore,
+                viewModel: viewModel,
                 commandHandler: commandHandler
             )
         }
@@ -49,6 +55,7 @@ struct ForgeFFApp: App {
 
 private struct ForgeFFCommands: Commands {
     @ObservedObject var queueStore: JobQueueStore
+    @ObservedObject var viewModel: QueueViewModel
     let commandHandler: AppCommandHandler
     @Environment(\.openWindow) private var openWindow
 
@@ -72,7 +79,7 @@ private struct ForgeFFCommands: Commands {
         }
 
         CommandMenu("Queue") {
-            Button("\(queueStore.startButtonTitle) Queue") {
+            Button("\(queueStore.startButtonTitle(selectedJobIDs: viewModel.selectedJobIDs)) Queue") {
                 commandHandler.triggerStartOrResume()
             }
             .keyboardShortcut(.return, modifiers: [.command])

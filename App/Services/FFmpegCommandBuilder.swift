@@ -1,8 +1,17 @@
 import Foundation
 
 enum FFmpegCommandBuilder {
-    struct CustomArgumentsValidation: Equatable {
+    struct CommandInvocation: Equatable {
+        let executableURL: URL
         let arguments: [String]
+        let commandLine: String
+    }
+
+    enum CommandInvocationError: Error, Equatable {
+        case invalidCustomTemplate(String)
+    }
+
+    struct CustomCommandTemplateValidation: Equatable {
         let errorMessage: String?
     }
 
@@ -35,6 +44,30 @@ enum FFmpegCommandBuilder {
         buildArguments(for: job, settings: settings, capabilities: .none, mode: mode)
     }
 
+    static func buildInvocation(
+        for job: VideoJob,
+        ffmpegURL: URL,
+        settings: AppSettings,
+        capabilities: FFmpegEncoderCapabilities = .none,
+        mode: Mode = .singlePass
+    ) throws -> CommandInvocation {
+        if job.options.isCustomCommandEnabled {
+            return try buildCustomCommandInvocation(
+                template: job.options.effectiveCustomCommandTemplate,
+                inputURL: job.sourceURL,
+                outputURL: outputURL(for: job, settings: settings),
+                resolvedFFmpegURL: ffmpegURL
+            )
+        }
+
+        let args = buildArguments(for: job, settings: settings, capabilities: capabilities, mode: mode)
+        return CommandInvocation(
+            executableURL: ffmpegURL,
+            arguments: args,
+            commandLine: commandLine(executableURL: ffmpegURL, arguments: args)
+        )
+    }
+
     static func buildArguments(
         for job: VideoJob,
         settings: AppSettings,
@@ -43,6 +76,10 @@ enum FFmpegCommandBuilder {
     ) -> [String] {
         let outputURL = outputURL(for: job, settings: settings)
         var arguments = ["-hide_banner", settings.allowOverwrite ? "-y" : "-n", "-i", job.sourceURL.path]
+
+        for attachment in job.options.externalAudioAttachments {
+            arguments.append(contentsOf: ["-i", attachment.fileURL.path])
+        }
 
         for subtitle in job.options.subtitleAttachments {
             arguments.append(contentsOf: ["-i", subtitle.fileURL.path])
@@ -58,9 +95,13 @@ enum FFmpegCommandBuilder {
 
         if job.options.isAudioOnly {
             arguments.append("-vn")
-            arguments.append(contentsOf: ["-map", "0:a?"])
+            appendAudioMaps(for: job, into: &arguments)
         } else {
-            arguments.append(contentsOf: ["-map", "0:v:0", "-map", "0:a?"])
+            arguments.append(contentsOf: ["-map", "0:v:0"])
+            appendAudioMaps(for: job, into: &arguments)
+            if !job.options.externalAudioAttachments.isEmpty {
+                arguments.append("-shortest")
+            }
 
             if !job.options.removeEmbeddedSubtitles {
                 if job.options.effectiveSubtitleMode != .remove {
@@ -74,8 +115,9 @@ enum FFmpegCommandBuilder {
 
         appendAudioEncoding(for: job, into: &arguments)
         appendSubtitleEncoding(for: job, into: &arguments)
-        arguments.append(contentsOf: validateCustomArguments(job.options.customFFmpegArguments).arguments)
-
+        if job.options.webOptimization && job.options.isWebOptimizationAvailable {
+            arguments.append(contentsOf: ["-movflags", "+faststart"])
+        }
         switch mode {
         case .singlePass:
             arguments.append(outputURL.path)
@@ -95,48 +137,66 @@ enum FFmpegCommandBuilder {
         ([executableURL.path] + arguments).map(shellEscaped).joined(separator: " ")
     }
 
-    static func validateCustomArguments(_ rawValue: String) -> CustomArgumentsValidation {
-        let tokens = splitCommandLine(rawValue)
+    static func validateCustomCommandTemplate(_ rawValue: String, enabled: Bool) -> CustomCommandTemplateValidation {
+        guard enabled else {
+            return CustomCommandTemplateValidation(errorMessage: nil)
+        }
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return CustomCommandTemplateValidation(errorMessage: "Custom FFmpeg command template cannot be empty.")
+        }
+        guard trimmed.contains("{input}") else {
+            return CustomCommandTemplateValidation(errorMessage: "Custom FFmpeg command must include {input}.")
+        }
+        guard trimmed.contains("{output}") else {
+            return CustomCommandTemplateValidation(errorMessage: "Custom FFmpeg command must include {output}.")
+        }
+        let tokens = tokenizeCommandTemplate(trimmed)
         guard !tokens.isEmpty else {
-            return CustomArgumentsValidation(arguments: [], errorMessage: nil)
+            return CustomCommandTemplateValidation(errorMessage: "Custom FFmpeg command template cannot be parsed.")
+        }
+        return CustomCommandTemplateValidation(errorMessage: nil)
+    }
+
+    private static func buildCustomCommandInvocation(
+        template: String,
+        inputURL: URL,
+        outputURL: URL,
+        resolvedFFmpegURL: URL
+    ) throws -> CommandInvocation {
+        let validation = validateCustomCommandTemplate(template, enabled: true)
+        if let error = validation.errorMessage {
+            throw CommandInvocationError.invalidCustomTemplate(error)
         }
 
-        let disallowedFlags: Set<String> = [
-            "-i", "-filter_complex_script", "-passlogfile", "-report", "-stdin"
-        ]
-        let disallowedPrefixFlags: [String] = [
-            "-i=", "-filter_complex_script=", "-passlogfile=", "-report="
-        ]
-
-        var sanitized = [String]()
-        var previousFlagAllowsValue = false
-
-        for token in tokens {
-            if token.hasPrefix("-") {
-                if disallowedFlags.contains(token) || disallowedPrefixFlags.contains(where: { token.hasPrefix($0) }) {
-                    return CustomArgumentsValidation(
-                        arguments: [],
-                        errorMessage: "Custom arguments cannot set input/output paths or script file paths."
-                    )
-                }
-                previousFlagAllowsValue = true
-                sanitized.append(token)
-                continue
-            }
-
-            if previousFlagAllowsValue {
-                sanitized.append(token)
-                previousFlagAllowsValue = false
-                continue
-            }
-
-            return CustomArgumentsValidation(
-                arguments: [],
-                errorMessage: "Custom arguments cannot include standalone positional paths or output names."
-            )
+        let tokens = tokenizeCommandTemplate(template)
+        guard !tokens.isEmpty else {
+            throw CommandInvocationError.invalidCustomTemplate("Custom FFmpeg command template cannot be parsed.")
         }
 
-        return CustomArgumentsValidation(arguments: sanitized, errorMessage: nil)
+        let substitutedTokens = tokens.map {
+            $0.replacingOccurrences(of: "{input}", with: inputURL.path)
+                .replacingOccurrences(of: "{output}", with: outputURL.path)
+        }
+
+        let executableToken = substitutedTokens[0]
+        let executableURL: URL
+        if executableToken == "ffmpeg" {
+            executableURL = resolvedFFmpegURL
+        } else {
+            let explicitURL = URL(fileURLWithPath: executableToken)
+            guard FileManager.default.isExecutableFile(atPath: explicitURL.path) else {
+                throw CommandInvocationError.invalidCustomTemplate("Custom FFmpeg command executable not found or not executable.")
+            }
+            executableURL = explicitURL
+        }
+
+        let arguments = Array(substitutedTokens.dropFirst())
+        return CommandInvocation(
+            executableURL: executableURL,
+            arguments: arguments,
+            commandLine: commandLine(executableURL: executableURL, arguments: arguments)
+        )
     }
 
     private static func appendVideoEncoding(
@@ -156,7 +216,7 @@ enum FFmpegCommandBuilder {
                 }
             } else {
                 arguments.append(contentsOf: ["-c:v", "libx264"])
-                arguments.append(contentsOf: ["-preset", h264SpeedPreset(for: job.options)])
+                arguments.append(contentsOf: ["-preset", x264Preset(for: job.options.effectiveEncoderOption)])
                 if let customBitrate = job.options.videoBitrateKbps {
                     arguments.append(contentsOf: ["-b:v", "\(customBitrate)k"])
                 } else {
@@ -171,7 +231,7 @@ enum FFmpegCommandBuilder {
                 }
             } else {
                 arguments.append(contentsOf: ["-c:v", "libx265"])
-                arguments.append(contentsOf: ["-preset", hevcSpeedPreset(for: job.options)])
+                arguments.append(contentsOf: ["-preset", x265Preset(for: job.options.effectiveEncoderOption)])
                 if let customBitrate = job.options.videoBitrateKbps {
                     arguments.append(contentsOf: ["-b:v", "\(customBitrate)k"])
                 } else {
@@ -187,6 +247,7 @@ enum FFmpegCommandBuilder {
             } else {
                 arguments.append(contentsOf: ["-b:v", "0", "-crf", "\(vp9CRF(for: job.options.qualityProfile))"])
             }
+            arguments.append(contentsOf: ["-cpu-used", "\(vp9CPUUsed(for: job.options.effectiveEncoderOption))"])
             arguments.append(contentsOf: ["-row-mt", "1", "-threads", "\(defaultThreadCount())"])
         case .av1:
             appendAV1Encoding(for: job.options, capabilities: capabilities, into: &arguments)
@@ -228,11 +289,22 @@ enum FFmpegCommandBuilder {
 
     private static func appendExternalSubtitleMaps(for job: VideoJob, into arguments: inout [String]) {
         guard job.options.effectiveSubtitleMode == .addExternal else { return }
-        let subtitleStartIndex = 1
+        let subtitleStartIndex = 1 + job.options.externalAudioAttachments.count
         for (index, subtitle) in job.options.subtitleAttachments.enumerated() {
             arguments.append(contentsOf: ["-map", "\(subtitleStartIndex + index):0"])
             let streamIndex = (job.metadata?.subtitleStreams.count ?? 0) + index
             arguments.append(contentsOf: ["-metadata:s:s:\(streamIndex)", "language=\(subtitle.languageCode)"])
+        }
+    }
+
+    private static func appendAudioMaps(for job: VideoJob, into arguments: inout [String]) {
+        if job.options.externalAudioAttachments.isEmpty {
+            arguments.append(contentsOf: ["-map", "0:a?"])
+            return
+        }
+
+        for index in job.options.externalAudioAttachments.indices {
+            arguments.append(contentsOf: ["-map", "\(1 + index):a:0?"])
         }
     }
 
@@ -297,16 +369,22 @@ enum FFmpegCommandBuilder {
         }
     }
 
-    private static func h264SpeedPreset(for options: ConversionOptions) -> String {
-        if options.presetName.contains("(Fast)") { return "veryfast" }
-        if options.presetName.contains("(High Quality)") { return "slow" }
-        return "medium"
+    private static func x264Preset(for option: EncoderOption) -> String {
+        switch option {
+        case .veryFast: return "veryfast"
+        case .fast: return "fast"
+        case .medium: return "medium"
+        case .slow: return "slow"
+        }
     }
 
-    private static func hevcSpeedPreset(for options: ConversionOptions) -> String {
-        if options.presetName.contains("(Fast)") { return "fast" }
-        if options.presetName.contains("(High Quality)") { return "slow" }
-        return "medium"
+    private static func x265Preset(for option: EncoderOption) -> String {
+        switch option {
+        case .veryFast: return "veryfast"
+        case .fast: return "fast"
+        case .medium: return "medium"
+        case .slow: return "slow"
+        }
     }
 
     private static func customOrDefaultVideoToolboxBitrateKbps(options: ConversionOptions, codec: VideoCodec) -> Int? {
@@ -330,6 +408,15 @@ enum FFmpegCommandBuilder {
         }
     }
 
+    private static func vp9CPUUsed(for option: EncoderOption) -> Int {
+        switch option {
+        case .veryFast: return 6
+        case .fast: return 5
+        case .medium: return 4
+        case .slow: return 2
+        }
+    }
+
     private static func defaultThreadCount() -> Int {
         min(max(ProcessInfo.processInfo.activeProcessorCount, 2), 8)
     }
@@ -342,13 +429,13 @@ enum FFmpegCommandBuilder {
         if capabilities.supportsSVTAV1 {
             arguments.append(contentsOf: ["-c:v", "libsvtav1"])
             arguments.append(contentsOf: ["-crf", "\(av1SVTCRF(for: options.qualityProfile))"])
-            arguments.append(contentsOf: ["-preset", "\(av1SVTPreset(for: options.qualityProfile))"])
+            arguments.append(contentsOf: ["-preset", "\(svtAV1Preset(for: options.effectiveEncoderOption))"])
             return
         }
 
         arguments.append(contentsOf: ["-c:v", "libaom-av1"])
         arguments.append(contentsOf: ["-crf", "\(av1AOMCRF(for: options.qualityProfile))"])
-        arguments.append(contentsOf: ["-cpu-used", "\(av1AOMCPUUsed(for: options.qualityProfile))"])
+        arguments.append(contentsOf: ["-cpu-used", "\(aomAV1CPUUsed(for: options.effectiveEncoderOption))"])
     }
 
     private static func av1SVTCRF(for quality: QualityProfile) -> Int {
@@ -359,11 +446,12 @@ enum FFmpegCommandBuilder {
         }
     }
 
-    private static func av1SVTPreset(for quality: QualityProfile) -> Int {
-        switch quality {
-        case .smaller: return 8
-        case .balanced: return 6
-        case .better: return 4
+    private static func svtAV1Preset(for option: EncoderOption) -> Int {
+        switch option {
+        case .veryFast: return 8
+        case .fast: return 6
+        case .medium: return 5
+        case .slow: return 4
         }
     }
 
@@ -375,11 +463,12 @@ enum FFmpegCommandBuilder {
         }
     }
 
-    private static func av1AOMCPUUsed(for quality: QualityProfile) -> Int {
-        switch quality {
-        case .smaller: return 8
-        case .balanced: return 6
-        case .better: return 4
+    private static func aomAV1CPUUsed(for option: EncoderOption) -> Int {
+        switch option {
+        case .veryFast: return 6
+        case .fast: return 5
+        case .medium: return 4
+        case .slow: return 2
         }
     }
 
@@ -439,7 +528,7 @@ enum FFmpegCommandBuilder {
         return requested
     }
 
-    private static func splitCommandLine(_ rawValue: String) -> [String] {
+    static func tokenizeCommandTemplate(_ rawValue: String) -> [String] {
         var tokens = [String]()
         var current = ""
         var quoteCharacter: Character?

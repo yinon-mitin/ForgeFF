@@ -18,6 +18,7 @@ struct JobHistoryRecord: Codable, Identifiable, Equatable {
     let dynamicRange: String
 
     static func from(job: VideoJob) -> JobHistoryRecord {
+        let recordedOptions = job.executionSnapshot?.options ?? job.options
         let stream = job.metadata?.videoStream
         let resolution: String
         if let width = stream?.width, let height = stream?.height {
@@ -30,7 +31,7 @@ struct JobHistoryRecord: Codable, Identifiable, Equatable {
             id: job.id,
             sourcePath: job.sourceURL.path,
             outputPath: job.result?.outputURL?.path,
-            presetName: job.options.presetName,
+            presetName: recordedOptions.presetName,
             status: job.status,
             createdAt: job.createdAt,
             completedAt: job.completedAt,
@@ -39,9 +40,9 @@ struct JobHistoryRecord: Codable, Identifiable, Equatable {
             durationSeconds: job.result?.elapsedSeconds,
             averageSpeed: job.result?.averageSpeed,
             resolutionDescription: resolution,
-            videoCodec: job.options.videoCodec.displayName,
-            audioCodec: job.options.audioCodec.displayName,
-            dynamicRange: job.metadata?.isHDR == true ? "HDR" : "SDR"
+            videoCodec: recordedOptions.videoCodec.displayName,
+            audioCodec: recordedOptions.audioCodec.displayName,
+            dynamicRange: job.metadata?.dynamicRangeDescription ?? "SDR"
         )
     }
 }

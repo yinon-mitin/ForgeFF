@@ -1,25 +1,47 @@
 # ForgeFF
 
-ForgeFF is a native macOS 13+ video converter built with SwiftUI and powered by FFmpeg/FFprobe. It is a presets-first desktop app for batch conversion, designed to stay beginner-friendly while still exposing practical controls for quality, codec, subtitles, cleanup, and HDR to SDR conversion.
+ForgeFF is a native macOS batch media converter built around practical presets, a reliable queue, and the option to drop into detailed FFmpeg controls only when they are actually needed.
 
-ForgeFF does not bundle FFmpeg by default. Users install FFmpeg separately and the app auto-detects binaries at startup, with an Advanced override when needed.
+It is designed for people who want FFmpeg power without living in the terminal: drag files in, pick a preset, and convert. Advanced users still get codec, container, quality, subtitle, audio, cleanup, and custom-command controls when the job needs them.
 
-## Key Features
+## Demo
 
-- Native macOS app (SwiftUI) with drag-and-drop batch queue.
-- Preset-first workflow for H.264, HEVC, VP9, AV1, and ProRes.
-- FFprobe metadata analysis with codec/resolution/HDR information.
-- Reliable sequential queue with start/pause/cancel/retry and per-job progress.
-- Subtitle handling: keep, remove, or add external subtitle file.
-- Cleanup tools: remove metadata and remove chapters.
-- Optional HDR -> SDR tone mapping.
-- Output naming templates and safe overwrite behavior.
+> ![ForgeFF demo](https://github.com/yinon-mitin/ForgeFF/main/docs/screenshots/forgeff-demo.mp4)
 
-## Requirements
+## Screenshots
 
-- macOS 13 or newer.
-- Xcode 15+ for local development.
-- FFmpeg and FFprobe installed on the machine.
+![Settings-Presets](https://github.com/yinon-mitin/ForgeFF/main/docs/screenshots/Settings-1.png)
+
+![Settings-Video](https://github.com/yinon-mitin/ForgeFF/main/docs/screenshots/Settings-2.png)
+
+![Settings-Audio-and-Subtitles](https://github.com/yinon-mitin/ForgeFF/main/docs/screenshots/Settings-3.png)
+
+![Settings-Output-and-Cleanup](https://github.com/yinon-mitin/ForgeFF/main/docs/screenshots/Settings-4.png)
+
+![Settings-Advanced](https://github.com/yinon-mitin/ForgeFF/main/docs/screenshots/Settings-5.png)
+
+
+
+
+## Highlights
+
+- Presets-first workflow for the common export paths: Fast MP4, Efficient HEVC, Editing ProRes, and compact web-share output.
+- Batch queue with drag-and-drop import, start/pause/cancel/retry controls, per-job progress, and Dock progress.
+- Clean default UI with `More Settings` for container, codec, quality, resolution, FPS, audio, subtitles, cleanup, rename tools, and advanced overrides.
+- Custom and user presets with consistent selection, customization, import, and export behavior.
+- Multiple external audio tracks and multiple external subtitle files with ordered muxing support.
+- Output folder controls for defaults, per-selection overrides, and folder drag-and-drop.
+- Preview thumbnails, Quick Look for completed outputs, and clearer queue failure details.
+- Native macOS presentation in dark mode with keyboard-reachable controls across the main workflow.
+
+## Installation
+
+ForgeFF requires:
+
+- macOS 13 or newer
+- FFmpeg and FFprobe available on the machine
+
+ForgeFF does not bundle FFmpeg. The app will auto-detect common install locations on launch and will prompt for manual selection if it cannot find the binaries.
 
 Install FFmpeg with Homebrew:
 
@@ -27,44 +49,69 @@ Install FFmpeg with Homebrew:
 brew install ffmpeg
 ```
 
-## Install ForgeFF (From GitHub Releases)
+Download ForgeFF from GitHub Releases:
 
-1. Download `ForgeFF-macos-vX.Y.Z.zip` from the latest Release.
-2. Unzip and drag `ForgeFF.app` into `/Applications`.
+1. Download the latest `ForgeFF-macos-vX.Y.Z.zip` archive from the repository’s Releases page.
+2. Unzip the archive and drag `ForgeFF.app` into `/Applications`.
 3. Launch the app.
-4. If Gatekeeper blocks first run, right click the app and choose `Open`, then confirm `Open`.
+4. If Gatekeeper blocks first run, right-click the app, choose `Open`, and confirm.
 
-## FFmpeg Path Setup
+## Usage
 
-- On launch, ForgeFF auto-detects common FFmpeg/FFprobe paths (`/opt/homebrew/bin`, `/usr/local/bin`, etc.).
-- If missing, an onboarding modal prompts installation help or manual selection.
-- Manual overrides are available in the sidebar `Advanced` section:
-  - detected path display
-  - `Change...`
-  - `Reset to Auto`
+### Add media
 
-## Known Limitations
+- Drag files or folders into the queue.
+- Use the toolbar `Add…` menu to import files or folders manually.
+- Select one or more queue items to apply settings to a subset of the queue.
 
-- AV1/VP9 availability depends on your FFmpeg build (`libsvtav1`, `libaom-av1`, `libvpx-vp9` encoders).
-- External subtitle muxing support varies by container and subtitle format.
-  - MKV has the broadest compatibility.
-  - MP4/MOV may require specific subtitle formats (typically `srt`/`mov_text` paths).
-- Notarization is not included in this repository’s default release process.
+### Pick a preset
 
-## Troubleshooting
+- Start with one of the primary preset cards in the sidebar.
+- Presets immediately update the underlying conversion configuration.
+- If you adjust settings manually, ForgeFF keeps the preset visible and marks it as customized only while the effective settings actually differ.
 
-- **FFmpeg not found**: install via `brew install ffmpeg`, then relaunch ForgeFF or use `Advanced > Change...`.
-- **Permissions errors**: select files/folders through app dialogs so macOS grants access.
-- **Output not overwritten**: ensure `Allow overwrite` is enabled; otherwise ForgeFF uses safe no-overwrite behavior.
-- **Codec option disabled**: your FFmpeg build likely lacks that encoder; verify with `ffmpeg -encoders`.
+### Open More Settings when needed
 
-## Build From Source
+- `More Settings` expands the advanced panel inside the sidebar.
+- The default collapsed state keeps the app approachable for non-technical users.
+- Advanced controls cover format, codec, quality, encoder behavior, resolution, FPS, audio, subtitles, cleanup, rename tools, and custom FFmpeg overrides.
+
+### Choose output behavior
+
+- Set a default output folder for new exports.
+- Override the output folder for the current selection only when needed.
+- Drag a Finder folder directly onto the output controls if that is faster than opening the picker.
+
+### Manage external media
+
+- Add one or more external audio tracks when you want to replace source audio.
+- Add one or more external subtitle files and set language codes per track.
+- Track order in the sidebar is preserved for muxing.
+
+### Run the queue
+
+- Use `Start` to process the whole queue or the current selection.
+- Pause, resume, cancel, retry failed jobs, reveal completed outputs, or inspect failure details directly from the queue.
+- Running jobs keep the settings snapshot they started with, even if you keep editing presets or options while they are processing.
+
+## Updates
+
+ForgeFF’s public builds are currently distributed through GitHub Releases.
+
+- There is no in-app auto-update flow in the current public build.
+- To update, download the latest release archive and replace the existing app bundle.
+- Checksums are published alongside release archives for verification.
+
+## Development
+
+### Build locally
 
 ```bash
 xcodebuild \
   -project ForgeFF.xcodeproj \
   -scheme ForgeFF \
   -destination 'platform=macOS' \
+  -derivedDataPath .build/DerivedData \
   CODE_SIGNING_ALLOWED=NO \
   build
 ```
@@ -75,28 +122,34 @@ Run the built app:
 open ".build/DerivedData/Build/Products/Debug/ForgeFF.app"
 ```
 
-## Release Artifact (Local)
+### Test locally
 
 ```bash
 xcodebuild \
   -project ForgeFF.xcodeproj \
   -scheme ForgeFF \
-  -configuration Release \
   -destination 'platform=macOS' \
   -derivedDataPath .build/DerivedData \
   CODE_SIGNING_ALLOWED=NO \
-  clean build
-
-cd .build/DerivedData/Build/Products/Release
-ditto -c -k --sequesterRsrc --keepParent ForgeFF.app ForgeFF-macos-v1.0.0.zip
-shasum -a 256 ForgeFF-macos-v1.0.0.zip > ForgeFF-macos-v1.0.0.zip.sha256
+  test
 ```
 
-## App Icon Source
+### Release packaging
 
-- Canonical icon source: `./app-icon.png` (1024x1024).
-- Generated icon assets: `ForgeFF/Assets.xcassets/AppIcon.appiconset/`.
-- Regenerate icon renditions:
+The repository includes `.github/workflows/release.yml` for tagged macOS releases. The intended release flow is:
+
+1. Build a Release archive.
+2. Sign it with a Developer ID Application certificate.
+3. Notarize the archive with Apple.
+4. Upload `ForgeFF-macos-vX.Y.Z.zip` and its checksum to GitHub Releases.
+
+Required CI secrets are documented in the workflow file. Local release signing and notarization require Apple credentials and certificates that are not stored in this repository.
+
+## Repository Notes
+
+- Canonical icon source: `forgeFF-icon-v2.png`
+- Generated app icons: `ForgeFF/Assets.xcassets/AppIcon.appiconset/`
+- Regenerate icon renditions with:
 
 ```bash
 ./scripts/generate_appiconset.sh
@@ -104,8 +157,8 @@ shasum -a 256 ForgeFF-macos-v1.0.0.zip > ForgeFF-macos-v1.0.0.zip.sha256
 
 ## License
 
-This project is licensed under the MIT License. See `LICENSE`.
+ForgeFF is released under the MIT License. See [LICENSE](LICENSE).
 
-### FFmpeg Licensing Note
+### FFmpeg licensing
 
-ForgeFF invokes user-installed FFmpeg/FFprobe and does not redistribute FFmpeg binaries by default. FFmpeg licensing (LGPL/GPL and codec-specific implications) is separate; users and distributors are responsible for complying with FFmpeg’s terms when distributing binaries.
+ForgeFF invokes user-installed FFmpeg and FFprobe. FFmpeg licensing remains separate from ForgeFF itself, so anyone redistributing FFmpeg binaries is responsible for complying with FFmpeg’s licensing terms.

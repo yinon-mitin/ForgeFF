@@ -2,36 +2,53 @@ import AppKit
 import SwiftUI
 
 enum SidebarFocusTarget: Hashable {
-    case presets
+    case presetCard(String)
+    case morePresets
     case chooseDefaultOutputFolder
+    case resetDefaultOutputFolder
     case chooseOutputFolderForSelection
-    case videoToolboxDefault
     case allowOverwrite
+    case startConversion
     case container
     case videoCodec
+    case videoCodecHelp
     case quality
+    case encoderOptions
     case resolution
     case resolutionCustomWidth
     case resolutionCustomHeight
     case fps
     case fpsCustomValue
     case audioCodec
+    case moreSettingsTogglePill
+    case videoToolboxDefault
     case audioBitrate
     case audioChannels
     case subtitles
+    case subtitleAdd
+    case subtitleClear
     case cleanupMetadata
     case cleanupChapters
+    case webOptimization
+    case externalAudioAdd
+    case externalAudioClear
+    case externalAudioRemove(UUID)
     case hdrEnable
     case hdrToneMap
-    case advancedHeader
+    case renameTogglePill
+    case advancedTogglePill
     case advancedFFmpegChange
     case advancedFFmpegReset
     case advancedFFprobeChange
     case advancedFFprobeReset
     case advancedVideoBitrate
     case advancedSubtitleLanguage
-    case advancedCustomArgs
-    case advancedCustomArgsReset
+    case advancedCustomCommandToggle
+    case advancedCustomCommandInsertExample
+    case advancedCustomCommandTemplate
+    case advancedCustomCommandReset
+    case subtitleLanguage(UUID)
+    case subtitleRemove(UUID)
     case renamePrefix
     case renameSuffix
     case renameReplace
@@ -41,36 +58,53 @@ enum SidebarFocusTarget: Hashable {
 
     var scrollID: String {
         switch self {
-        case .presets: return "focus.presets"
+        case let .presetCard(name): return "focus.presets.card.\(name)"
+        case .morePresets: return "focus.presets.more"
         case .chooseDefaultOutputFolder: return "focus.defaults.output"
+        case .resetDefaultOutputFolder: return "focus.defaults.output.reset"
         case .chooseOutputFolderForSelection: return "focus.defaults.selectionOutput"
-        case .videoToolboxDefault: return "focus.defaults.videotoolbox"
         case .allowOverwrite: return "focus.defaults.overwrite"
+        case .startConversion: return "focus.defaults.start"
         case .container: return "focus.essentials.container"
         case .videoCodec: return "focus.essentials.videoCodec"
+        case .videoCodecHelp: return "focus.essentials.videoCodec.help"
         case .quality: return "focus.essentials.quality"
+        case .encoderOptions: return "focus.essentials.encoderOptions"
         case .resolution: return "focus.essentials.resolution"
         case .resolutionCustomWidth: return "focus.essentials.resolution.customWidth"
         case .resolutionCustomHeight: return "focus.essentials.resolution.customHeight"
         case .fps: return "focus.essentials.fps"
         case .fpsCustomValue: return "focus.essentials.fps.customValue"
         case .audioCodec: return "focus.essentials.audioCodec"
+        case .moreSettingsTogglePill: return "focus.moreSettings.togglePill"
+        case .videoToolboxDefault: return "focus.moreSettings.videotoolbox"
         case .audioBitrate: return "focus.essentials.audioBitrate"
         case .audioChannels: return "focus.essentials.audioChannels"
         case .subtitles: return "focus.subtitles.mode"
+        case .subtitleAdd: return "focus.subtitles.add"
+        case .subtitleClear: return "focus.subtitles.clear"
         case .cleanupMetadata: return "focus.cleanup.metadata"
         case .cleanupChapters: return "focus.cleanup.chapters"
+        case .webOptimization: return "focus.moreSettings.webOptimization"
+        case .externalAudioAdd: return "focus.moreSettings.externalAudio.add"
+        case .externalAudioClear: return "focus.moreSettings.externalAudio.clear"
+        case let .externalAudioRemove(id): return "focus.moreSettings.externalAudio.remove.\(id.uuidString)"
         case .hdrEnable: return "focus.hdr.enable"
         case .hdrToneMap: return "focus.hdr.tonemap"
-        case .advancedHeader: return "focus.advanced.header"
+        case .renameTogglePill: return "focus.rename.togglePill"
+        case .advancedTogglePill: return "focus.advanced.togglePill"
         case .advancedFFmpegChange: return "focus.advanced.ffmpeg.change"
         case .advancedFFmpegReset: return "focus.advanced.ffmpeg.reset"
         case .advancedFFprobeChange: return "focus.advanced.ffprobe.change"
         case .advancedFFprobeReset: return "focus.advanced.ffprobe.reset"
         case .advancedVideoBitrate: return "focus.advanced.videoBitrate"
         case .advancedSubtitleLanguage: return "focus.advanced.subtitleLanguage"
-        case .advancedCustomArgs: return "focus.advanced.customArgs"
-        case .advancedCustomArgsReset: return "focus.advanced.customArgs.reset"
+        case .advancedCustomCommandToggle: return "focus.advanced.customCommand.toggle"
+        case .advancedCustomCommandInsertExample: return "focus.advanced.customCommand.insertExample"
+        case .advancedCustomCommandTemplate: return "focus.advanced.customCommand.template"
+        case .advancedCustomCommandReset: return "focus.advanced.customCommand.reset"
+        case let .subtitleLanguage(id): return "focus.subtitles.language.\(id.uuidString)"
+        case let .subtitleRemove(id): return "focus.subtitles.remove.\(id.uuidString)"
         case .renamePrefix: return "focus.rename.prefix"
         case .renameSuffix: return "focus.rename.suffix"
         case .renameReplace: return "focus.rename.replace"
@@ -239,16 +273,32 @@ final class SidebarFocusRouter: ObservableObject {
         guard isSidebarVisible else { return }
         let enabledOrder = order.filter { isTargetEnabled($0) }
         guard !enabledOrder.isEmpty else { return }
-        guard let index = enabledOrder.firstIndex(of: target) else {
+        guard enabledOrder.contains(target) else {
             moveFocus(
                 backwards ? enabledOrder.last! : enabledOrder.first!,
                 source: backwards ? .keyboardShiftTab : .keyboardTab
             )
             return
         }
-        let step = backwards ? -1 : 1
-        let nextIndex = (index + step + enabledOrder.count) % enabledOrder.count
-        moveFocus(enabledOrder[nextIndex], source: backwards ? .keyboardShiftTab : .keyboardTab)
+        if let adjacent = adjacentTarget(from: target, backwards: backwards) {
+            moveFocus(adjacent, source: backwards ? .keyboardShiftTab : .keyboardTab)
+        } else {
+            moveFocusOutOfSidebar(backwards: backwards)
+        }
+    }
+
+    func adjacentTarget(from target: SidebarFocusTarget, backwards: Bool) -> SidebarFocusTarget? {
+        let enabledOrder = order.filter { isTargetEnabled($0) }
+        guard !enabledOrder.isEmpty,
+              let index = enabledOrder.firstIndex(of: target) else {
+            return nil
+        }
+
+        let nextIndex = index + (backwards ? -1 : 1)
+        guard enabledOrder.indices.contains(nextIndex) else {
+            return nil
+        }
+        return enabledOrder[nextIndex]
     }
 
     func handleKeyDown(for target: SidebarFocusTarget, event: NSEvent) -> Bool {
@@ -295,10 +345,16 @@ final class SidebarFocusRouter: ObservableObject {
 
             let isTextEditing = self.isTextEditingResponder(window.firstResponder)
 
-            let hasRouterContext = self.currentFocusedTarget != nil
+            let responderInSidebar = self.isResponder(window.firstResponder, inside: self.scopeView)
+            let hasRouterContext = responderInSidebar
                 || self.activeTarget != nil
                 || self.pendingFocusRequest != nil
+
             if !hasRouterContext && isTextEditing {
+                return event
+            }
+
+            if !hasRouterContext && !responderInSidebar {
                 return event
             }
 
@@ -327,7 +383,13 @@ final class SidebarFocusRouter: ObservableObject {
                 self.focusNext(from: healed, backwards: event.modifierFlags.contains(.shift))
                 return nil
             }
-            self.focusNext(from: currentTarget, backwards: event.modifierFlags.contains(.shift))
+
+            let backwards = event.modifierFlags.contains(.shift)
+            if let adjacent = self.adjacentTarget(from: currentTarget, backwards: backwards) {
+                self.moveFocus(adjacent, source: backwards ? .keyboardShiftTab : .keyboardTab)
+            } else {
+                self.moveFocusOutOfSidebar(backwards: backwards)
+            }
             return nil
         }
     }
@@ -427,6 +489,18 @@ final class SidebarFocusRouter: ObservableObject {
         return textView.isEditable
     }
 
+    private func isResponder(_ responder: AnyObject?, inside scopeView: NSView?) -> Bool {
+        guard let scopeView else { return false }
+        if let view = responder as? NSView {
+            return view === scopeView || view.isDescendant(of: scopeView)
+        }
+        if let textView = responder as? NSTextView,
+           let hostView = textView.superview {
+            return hostView === scopeView || hostView.isDescendant(of: scopeView)
+        }
+        return false
+    }
+
     private func centerTargetInScrollView(_ target: SidebarFocusTarget) {
         guard isSidebarVisible else { return }
         guard let proxyView = proxyViews[target]?.value else { return }
@@ -437,10 +511,20 @@ final class SidebarFocusRouter: ObservableObject {
         let targetRect = anchorView.convert(anchorView.bounds, to: documentView)
         let visibleRect = scrollView.contentView.documentVisibleRect
 
-        var newY = targetRect.midY - (visibleRect.height / 2)
         let maxY = max(0, documentView.bounds.height - visibleRect.height)
         let contentInsetTop = scrollView.contentInsets.top
         let minY = min(maxY, -contentInsetTop)
+        let comfortInset = min(max(visibleRect.height * 0.18, 24), 72)
+        let safeMinY = visibleRect.minY + comfortInset
+        let safeMaxY = visibleRect.maxY - comfortInset
+
+        var newY = visibleRect.origin.y
+        if targetRect.maxY > safeMaxY {
+            newY += targetRect.maxY - safeMaxY
+        } else if targetRect.minY < safeMinY {
+            newY -= safeMinY - targetRect.minY
+        }
+
         newY = min(max(newY, minY), maxY)
 
         let delta = newY - visibleRect.origin.y
@@ -463,6 +547,26 @@ final class SidebarFocusRouter: ObservableObject {
 
     private func moveFocus(_ target: SidebarFocusTarget, source: FocusChangeSource) {
         focus(target, source: source)
+    }
+
+    private func moveFocusOutOfSidebar(backwards: Bool) {
+        pendingFocusRequest = nil
+        activeTarget = nil
+        currentFocusedTarget = nil
+
+        guard let window = window ?? scopeView?.window,
+              let scopeView else { return }
+
+        let previousResponder = window.firstResponder
+        if backwards {
+            window.selectKeyView(preceding: scopeView)
+        } else {
+            window.selectKeyView(following: scopeView)
+        }
+
+        if window.firstResponder === previousResponder {
+            _ = window.makeFirstResponder(nil)
+        }
     }
 
     private func findEnclosingScrollView(from view: NSView) -> NSScrollView? {

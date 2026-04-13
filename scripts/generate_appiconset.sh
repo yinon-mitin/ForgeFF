@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_ICON="${1:-app-icon.png}"
+ROOT_ICON="${1:-forgeFF-icon-v2.png}"
 APPICONSET_DIR="${2:-ForgeFF/Assets.xcassets/AppIcon.appiconset}"
 
 if [[ ! -f "$ROOT_ICON" ]]; then

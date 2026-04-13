@@ -10,6 +10,7 @@ struct FFmpegProgress {
 
 enum FFmpegRunnerError: LocalizedError {
     case missingBinary
+    case invalidCustomCommand(String)
     case processFailed(summary: String, details: String, commandLine: String)
     case cancelled
 
@@ -17,6 +18,8 @@ enum FFmpegRunnerError: LocalizedError {
         switch self {
         case .missingBinary:
             return "FFmpeg is not configured. Set the ffmpeg binary path in Settings."
+        case let .invalidCustomCommand(message):
+            return message
         case let .processFailed(summary, _, _):
             return summary
         case .cancelled:
@@ -46,6 +49,7 @@ enum FFmpegRunnerError: LocalizedError {
 final class FFmpegRunner {
     private var currentProcess: Process?
     private var isCancelled = false
+    private(set) var lastResolvedVersion: String?
 
     func run(
         job: VideoJob,
@@ -68,13 +72,25 @@ final class FFmpegRunner {
 
         let startDate = Date()
         var lastSpeed: Double?
-        let arguments = FFmpegCommandBuilder.buildArguments(for: job, settings: settings, capabilities: capabilities)
-        let commandLine = FFmpegCommandBuilder.commandLine(executableURL: executableURL, arguments: arguments)
+        let invocation: FFmpegCommandBuilder.CommandInvocation
+        do {
+            invocation = try FFmpegCommandBuilder.buildInvocation(
+                for: job,
+                ffmpegURL: executableURL,
+                settings: settings,
+                capabilities: capabilities
+            )
+        } catch let FFmpegCommandBuilder.CommandInvocationError.invalidCustomTemplate(message) {
+            throw FFmpegRunnerError.invalidCustomCommand(message)
+        } catch {
+            throw FFmpegRunnerError.invalidCustomCommand("Invalid custom FFmpeg command template.")
+        }
+        lastResolvedVersion = await Self.resolveVersionString(for: invocation.executableURL)
         let finalSpeed = try await execute(
-            executableURL: executableURL,
-            arguments: arguments,
+            executableURL: invocation.executableURL,
+            arguments: invocation.arguments,
             totalDuration: job.metadata?.durationSeconds,
-            commandLine: commandLine,
+            commandLine: invocation.commandLine,
             progress: progress
         ) { update in
             lastSpeed = update.speed
@@ -100,9 +116,14 @@ final class FFmpegRunner {
         Darwin.kill(pid_t(pid), SIGCONT)
     }
 
-    func cancel() {
+    func cancel(force: Bool = false) {
         isCancelled = true
-        currentProcess?.terminate()
+        guard let process = currentProcess else { return }
+        if force {
+            Darwin.kill(pid_t(process.processIdentifier), SIGKILL)
+        } else {
+            process.terminate()
+        }
     }
 
     @discardableResult
@@ -224,6 +245,52 @@ final class FFmpegRunner {
             return specific
         }
         return lines.last ?? "FFmpeg failed with no error output."
+    }
+
+    private static func resolveVersionString(for executableURL: URL) async -> String? {
+        let key = executableURL.path
+        if let cached = await VersionCache.shared.value(for: key) {
+            return cached
+        }
+
+        let process = Process()
+        process.executableURL = executableURL
+        process.arguments = ["-version"]
+        let outputPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            await VersionCache.shared.store(nil, for: key)
+            return nil
+        }
+
+        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let firstLine = String(data: data, encoding: .utf8)?
+            .split(whereSeparator: \.isNewline)
+            .first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        await VersionCache.shared.store(firstLine, for: key)
+        return firstLine
+    }
+}
+
+private actor VersionCache {
+    static let shared = VersionCache()
+
+    private var values: [String: String?] = [:]
+
+    func value(for key: String) -> String? {
+        values[key] ?? nil
+    }
+
+    func store(_ value: String?, for key: String) {
+        values[key] = value
     }
 }
 

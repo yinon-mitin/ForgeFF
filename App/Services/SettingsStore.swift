@@ -105,10 +105,24 @@ final class SettingsStore: ObservableObject {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.folder]
         panel.prompt = "Choose"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let bookmark = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+        setDefaultOutputDirectory(url)
+    }
+
+    func setDefaultOutputDirectory(_ url: URL) {
+        guard isDirectory(url) else { return }
+        let bookmark = try? url.bookmarkData(
+            options: .withSecurityScope,
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
         settings.defaultOutputDirectoryBookmark = bookmark
+    }
+
+    func resetDefaultOutputDirectory() {
+        settings.defaultOutputDirectoryBookmark = nil
     }
 
     func saveLastUsed(options: ConversionOptions) {
@@ -180,6 +194,10 @@ final class SettingsStore: ObservableObject {
         guard let data = try? JSONEncoder().encode(settings) else { return }
         defaults.set(data, forKey: settingsKey)
     }
+
+    private func isDirectory(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+    }
 }
 
 extension URL {
@@ -226,6 +244,19 @@ final class UserPresetStore: ObservableObject {
         persist()
     }
 
+    func exportPresets(to url: URL) throws {
+        let archive = UserPresetArchive(presets: presets)
+        let data = try encoder.encode(archive)
+        try data.write(to: url, options: .atomic)
+    }
+
+    func importPresets(from url: URL) throws {
+        let data = try Data(contentsOf: url)
+        let importedPresets = try Self.decodePresets(from: data, using: decoder)
+        mergeImportedPresets(importedPresets)
+        persist()
+    }
+
     func preset(named name: String) -> UserPreset? {
         presets.first { $0.name == name }
     }
@@ -247,11 +278,22 @@ final class UserPresetStore: ObservableObject {
 
     private func load() {
         guard let data = try? Data(contentsOf: fileURL),
-              let decoded = try? decoder.decode([UserPreset].self, from: data) else {
+              let decoded = try? Self.decodePresets(from: data, using: decoder) else {
             presets = []
             return
         }
         presets = decoded
+    }
+
+    private func mergeImportedPresets(_ imported: [UserPreset]) {
+        for preset in imported {
+            var resolvedPreset = preset
+            let resolvedName = uniqueName(for: preset.name)
+            resolvedPreset.name = resolvedName
+            resolvedPreset.options.presetName = resolvedName
+            resolvedPreset.updatedAt = Date()
+            presets.append(resolvedPreset)
+        }
     }
 
     private func persist() {
@@ -271,5 +313,18 @@ final class UserPresetStore: ObservableObject {
         return appSupport
             .appendingPathComponent("ForgeFF", isDirectory: true)
             .appendingPathComponent("user-presets.json", isDirectory: false)
+    }
+
+    private static func decodePresets(from data: Data, using decoder: JSONDecoder) throws -> [UserPreset] {
+        if let archive = try? decoder.decode(UserPresetArchive.self, from: data) {
+            switch archive.schemaVersion {
+            case 1:
+                return archive.presets
+            default:
+                throw CocoaError(.fileReadCorruptFile)
+            }
+        }
+
+        return try decoder.decode([UserPreset].self, from: data)
     }
 }

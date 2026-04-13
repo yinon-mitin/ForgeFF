@@ -15,10 +15,12 @@ Thanks for contributing to ForgeFF.
 - Keep the UI presets-first and avoid command-line input features.
 - Keep FFmpeg behavior deterministic and covered by unit tests.
 - Do not bundle FFmpeg binaries by default.
+- Do not commit local release archives, DerivedData, xcresults, or other build output.
 
 ## Pull Requests
 
 - Keep PRs focused and small when possible.
 - Include a short test plan and screenshots for UI changes.
 - Update `CHANGELOG.md` for user-facing changes.
+- Keep `README.md` accurate when behavior, installation, or release flow changes.
 - Ensure local build and tests pass before opening PR.

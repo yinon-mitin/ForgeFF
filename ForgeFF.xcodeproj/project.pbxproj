@@ -32,6 +32,9 @@
 		001000000000000000000013 /* OutputTemplateRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000013 /* OutputTemplateRenderer.swift */; };
 		001000000000000000000018 /* FFmpegPathDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000001A /* FFmpegPathDetection.swift */; };
 		001000000000000000000019 /* AppCommandHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000001B /* AppCommandHandler.swift */; };
+		00100000000000000000002C /* DockProgressController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000002C /* DockProgressController.swift */; };
+		00100000000000000000002D /* HelpTopics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000002D /* HelpTopics.swift */; };
+		00100000000000000000002E /* BuildIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000002E /* BuildIdentity.swift */; };
 		001000000000000000000015 /* FilenameRenamerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000015 /* FilenameRenamerTests.swift */; };
 		001000000000000000000016 /* FFprobeParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000016 /* FFprobeParserTests.swift */; };
 		001000000000000000000017 /* FFmpegCommandBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000017 /* FFmpegCommandBuilderTests.swift */; };
@@ -87,6 +90,9 @@
 		002000000000000000000022 /* WrappingPillsLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WrappingPillsLayoutTests.swift; sourceTree = "<group>"; };
 		00200000000000000000001A /* FFmpegPathDetection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFmpegPathDetection.swift; sourceTree = "<group>"; };
 		00200000000000000000001B /* AppCommandHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCommandHandler.swift; sourceTree = "<group>"; };
+		00200000000000000000002C /* DockProgressController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockProgressController.swift; sourceTree = "<group>"; };
+		00200000000000000000002D /* HelpTopics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpTopics.swift; sourceTree = "<group>"; };
+		00200000000000000000002E /* BuildIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildIdentity.swift; sourceTree = "<group>"; };
 		00200000000000000000001C /* FFmpegPathDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFmpegPathDetectorTests.swift; sourceTree = "<group>"; };
 			00200000000000000000001D /* AppCommandHandlerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCommandHandlerTests.swift; sourceTree = "<group>"; };
 			002000000000000000000027 /* SecurityScopedBookmarkStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityScopedBookmarkStoreTests.swift; sourceTree = "<group>"; };
@@ -141,6 +147,7 @@
 				007000000000000000000006 /* Models */,
 				007000000000000000000007 /* Services */,
 				007000000000000000000008 /* ViewModels */,
+				00700000000000000000000B /* Resources */,
 				007000000000000000000009 /* Views */,
 				00700000000000000000000A /* Utilities */,
 			);
@@ -197,6 +204,7 @@
 				00200000000000000000000B /* JobQueueStore.swift */,
 				00200000000000000000001A /* FFmpegPathDetection.swift */,
 				00200000000000000000001B /* AppCommandHandler.swift */,
+				00200000000000000000002C /* DockProgressController.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -207,6 +215,14 @@
 				00200000000000000000000C /* QueueViewModel.swift */,
 			);
 			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		00700000000000000000000B /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				00200000000000000000002D /* HelpTopics.swift */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		007000000000000000000009 /* Views */ = {
@@ -228,6 +244,7 @@
 				002000000000000000000012 /* FilenameRenamer.swift */,
 				002000000000000000000028 /* FileSizeFormatterUtil.swift */,
 				002000000000000000000013 /* OutputTemplateRenderer.swift */,
+				00200000000000000000002E /* BuildIdentity.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -248,6 +265,8 @@
 			dependencies = (
 			);
 			name = ForgeFF;
+			packageProductDependencies = (
+			);
 			productName = ForgeFF;
 			productReference = 002000000000000000000018 /* ForgeFF.app */;
 			productType = "com.apple.product-type.application";
@@ -300,6 +319,8 @@
 			mainGroup = 007000000000000000000001;
 			productRefGroup = 007000000000000000000005 /* Products */;
 			projectDirPath = "";
+			packageReferences = (
+			);
 			projectRoot = "";
 			targets = (
 				005000000000000000000001 /* ForgeFF */,
@@ -354,8 +375,11 @@
 					001000000000000000000012 /* FilenameRenamer.swift in Sources */,
 					001000000000000000000028 /* FileSizeFormatterUtil.swift in Sources */,
 				001000000000000000000013 /* OutputTemplateRenderer.swift in Sources */,
+				00100000000000000000002D /* HelpTopics.swift in Sources */,
+				00100000000000000000002E /* BuildIdentity.swift in Sources */,
 				001000000000000000000018 /* FFmpegPathDetection.swift in Sources */,
 				001000000000000000000019 /* AppCommandHandler.swift in Sources */,
+				00100000000000000000002C /* DockProgressController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -393,61 +417,57 @@
 					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 					CODE_SIGN_ENTITLEMENTS = ForgeFF/ForgeFF.entitlements;
 					CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_TEAM = "";
-				ENABLE_TESTABILITY = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = ForgeFF;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "Open source";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.ForgeFF;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
+					CURRENT_PROJECT_VERSION = 200;
+					DEVELOPMENT_TEAM = "";
+					ENABLE_TESTABILITY = YES;
+					ENABLE_HARDENED_RUNTIME = YES;
+					GENERATE_INFOPLIST_FILE = NO;
+					INFOPLIST_FILE = ForgeFF/Info.plist;
+					LD_RUNPATH_SEARCH_PATHS = (
+						"$(inherited)",
+						"@executable_path/../Frameworks",
+					);
+					MACOSX_DEPLOYMENT_TARGET = 13.0;
+					MARKETING_VERSION = 2.0.0;
+					PRODUCT_BUNDLE_IDENTIFIER = com.yinonmitin.ForgeFF;
+					PRODUCT_NAME = "$(TARGET_NAME)";
+					SDKROOT = macosx;
+					SWIFT_EMIT_LOC_STRINGS = YES;
+					SWIFT_VERSION = 5.0;
+				};
+				name = Debug;
 			};
-			name = Debug;
-		};
 			00A000000000000000000002 /* Release */ = {
 				isa = XCBuildConfiguration;
 				buildSettings = {
 					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 					CODE_SIGN_ENTITLEMENTS = ForgeFF/ForgeFF.entitlements;
 					CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_TEAM = "";
-				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = ForgeFF;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "Open source";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.ForgeFF;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
+					CURRENT_PROJECT_VERSION = 200;
+					DEVELOPMENT_TEAM = "";
+					ENABLE_HARDENED_RUNTIME = YES;
+					GENERATE_INFOPLIST_FILE = NO;
+					INFOPLIST_FILE = ForgeFF/Info.plist;
+					LD_RUNPATH_SEARCH_PATHS = (
+						"$(inherited)",
+						"@executable_path/../Frameworks",
+					);
+					MACOSX_DEPLOYMENT_TARGET = 13.0;
+					MARKETING_VERSION = 2.0.0;
+					PRODUCT_BUNDLE_IDENTIFIER = com.yinonmitin.ForgeFF;
+					PRODUCT_NAME = "$(TARGET_NAME)";
+					SDKROOT = macosx;
+					SWIFT_EMIT_LOC_STRINGS = YES;
+					SWIFT_VERSION = 5.0;
+				};
+				name = Release;
 			};
-			name = Release;
-		};
 		00A000000000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 200;
 				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -456,8 +476,8 @@
 					"@loader_path/../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.ForgeFFTests;
+				MARKETING_VERSION = 2.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yinonmitin.ForgeFFTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
@@ -470,7 +490,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 200;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -478,8 +498,8 @@
 					"@loader_path/../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.ForgeFFTests;
+				MARKETING_VERSION = 2.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yinonmitin.ForgeFFTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
@@ -536,6 +556,7 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
 	};
 	rootObject = 004000000000000000000001 /* Project object */;
 }

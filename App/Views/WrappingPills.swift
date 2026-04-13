@@ -82,14 +82,14 @@ struct WrappingPills<Option: Hashable>: View {
                 } label: {
                     Text(title(option))
                         .lineLimit(1)
-                        .padding(.horizontal, 10)
-                        .frame(height: 28)
+                        .padding(.horizontal, 12)
+                        .frame(height: 30)
                         .background(selection == option ? Color.accentColor.opacity(0.18) : Color(nsColor: .controlBackgroundColor))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8)
+                            Capsule()
                                 .stroke(selection == option ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: 1)
                         )
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
                 .disabled(isDisabled(option))

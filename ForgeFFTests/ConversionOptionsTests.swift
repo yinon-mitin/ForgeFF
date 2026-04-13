@@ -50,6 +50,82 @@ final class ConversionOptionsTests: XCTestCase {
         XCTAssertEqual(externalResult.mode, .addExternal)
         XCTAssertEqual(externalResult.attachmentURL, previous)
     }
+
+    func testFormatTransitionSummaryUsesSourceMetadataAndTargetOptions() {
+        var options = ConversionOptions.default
+        options.container = .mp4
+        options.videoCodec = .hevc
+
+        var job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/sample.mkv"), options: options)
+        job.metadata = MediaMetadata(
+            format: .init(
+                filename: "/tmp/sample.mkv",
+                formatName: "matroska,webm",
+                formatLongName: "Matroska / WebM",
+                duration: "60.0",
+                size: "1000",
+                bitRate: "1000",
+                tags: nil
+            ),
+            streams: [
+                .init(
+                    index: 0,
+                    codecName: "h264",
+                    codecLongName: nil,
+                    profile: nil,
+                    codecType: "video",
+                    width: 1920,
+                    height: 1080,
+                    pixFmt: nil,
+                    avgFrameRate: "30/1",
+                    rFrameRate: nil,
+                    bitRate: nil,
+                    colorTransfer: nil,
+                    colorSpace: nil,
+                    colorPrimaries: nil,
+                    channelLayout: nil,
+                    sampleRate: nil,
+                    tags: nil,
+                    sideDataList: nil
+                )
+            ],
+            chapters: []
+        )
+
+        XCTAssertEqual(job.formatTransitionSummary, "MATROSKA (H264) → MP4 (HEVC)")
+    }
+
+    func testDecodingLegacyExternalAudioURLMigratesToAttachmentArray() throws {
+        let legacyJSON = """
+        {
+          "presetName": "MP4 — H.264 (Fast)",
+          "isAudioOnly": false,
+          "container": "mp4",
+          "videoCodec": "h264",
+          "audioCodec": "aac",
+          "qualityProfile": "balanced",
+          "frameRateOption": "keep",
+          "useHardwareAcceleration": true,
+          "removeMetadata": false,
+          "removeChapters": false,
+          "removeEmbeddedSubtitles": false,
+          "subtitleAttachments": [],
+          "externalAudioURL": "file:///tmp/legacy-voiceover.wav",
+          "enableHDRToSDR": false,
+          "toneMapMode": "hable",
+          "toneMapPeak": 1000,
+          "webOptimization": false,
+          "outputTemplate": "{name}_{preset}",
+          "isCustomCommandOverrideEnabled": false,
+          "customCommandTemplate": ""
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(ConversionOptions.self, from: legacyJSON)
+
+        XCTAssertEqual(decoded.externalAudioAttachments.count, 1)
+        XCTAssertEqual(decoded.externalAudioAttachments.first?.fileURL.path, "/tmp/legacy-voiceover.wav")
+    }
 }
 
 @MainActor
@@ -62,7 +138,7 @@ final class PresetBehaviorTests: XCTestCase {
         return QueueViewModel(queueStore: queueStore, userPresetStore: userPresetStore)
     }
 
-    func testManualQualityChangeSwitchesPresetToCustom() {
+    func testManualQualityChangeMarksPresetAsCustomizedButKeepsSelection() {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("json")
@@ -76,10 +152,11 @@ final class PresetBehaviorTests: XCTestCase {
         XCTAssertEqual(viewModel.draftOptions.presetName, preset.name)
 
         viewModel.updateOptions { $0.qualityProfile = .better }
-        XCTAssertEqual(viewModel.draftOptions.presetName, ConversionPreset.custom.name)
+        XCTAssertEqual(viewModel.draftOptions.presetName, preset.name)
+        XCTAssertTrue(viewModel.isPresetCustomized)
     }
 
-    func testManualResolutionCustomChangeSwitchesPresetToCustom() {
+    func testPresetCustomizationClearsWhenSettingsReturnToPresetState() {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("json")
@@ -91,8 +168,12 @@ final class PresetBehaviorTests: XCTestCase {
 
         viewModel.selectPreset(preset)
         viewModel.updateOptions { $0.resolutionOverride = .custom(width: 1440, height: 900) }
+        XCTAssertTrue(viewModel.isPresetCustomized)
 
-        XCTAssertEqual(viewModel.draftOptions.presetName, ConversionPreset.custom.name)
+        viewModel.updateOptions { $0.resolutionOverride = .preserve }
+
+        XCTAssertEqual(viewModel.draftOptions.presetName, preset.name)
+        XCTAssertFalse(viewModel.isPresetCustomized)
     }
 
     func testProgrammaticPresetApplyDoesNotSwitchToCustom() {
@@ -108,6 +189,49 @@ final class PresetBehaviorTests: XCTestCase {
         let preset = ConversionPreset.builtIns[1]
         viewModel.selectPreset(preset)
         XCTAssertEqual(viewModel.draftOptions.presetName, preset.name)
+    }
+
+    func testManualEncoderOptionsChangeMarksPresetAsCustomized() {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("json")
+        let viewModel = makeViewModel(fileURL: fileURL)
+        guard let preset = ConversionPreset.builtIns.first else {
+            XCTFail("Missing built-in presets")
+            return
+        }
+
+        viewModel.selectPreset(preset)
+        XCTAssertEqual(viewModel.draftOptions.presetName, preset.name)
+
+        viewModel.updateOptions { $0.encoderOption = .slow }
+        XCTAssertEqual(viewModel.draftOptions.presetName, preset.name)
+        XCTAssertTrue(viewModel.isPresetCustomized)
+    }
+
+    func testDisablingCustomCommandRestoresPresetMatchWhenNoOtherOverridesRemain() {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("json")
+        let viewModel = makeViewModel(fileURL: fileURL)
+        guard let preset = ConversionPreset.builtIns.first else {
+            XCTFail("Missing built-in presets")
+            return
+        }
+
+        viewModel.selectPreset(preset)
+        viewModel.updateOptions {
+            $0.isCustomCommandOverrideEnabled = true
+            $0.customCommandTemplate = #"ffmpeg -hide_banner -i "{input}" -c:v libx264 -crf 21 "{output}""#
+        }
+        XCTAssertTrue(viewModel.isPresetCustomized)
+
+        viewModel.updateOptions {
+            $0.isCustomCommandOverrideEnabled = false
+        }
+
+        XCTAssertEqual(viewModel.draftOptions.presetName, preset.name)
+        XCTAssertFalse(viewModel.isPresetCustomized)
     }
 
     func testUserPresetStorePersistsAndDeletes() throws {
@@ -131,6 +255,32 @@ final class PresetBehaviorTests: XCTestCase {
             reloaded.deletePreset(id: id)
         }
         XCTAssertEqual(reloaded.presets.count, 0)
+    }
+
+    func testUserPresetStoreExportsAndImportsArchiveSchema() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+
+        let storeURL = tempDirectory.appendingPathComponent("user-presets.json")
+        let exportURL = tempDirectory.appendingPathComponent("forgeff-presets-v2.json")
+        let importURL = tempDirectory.appendingPathComponent("imported-presets.json")
+
+        let store = UserPresetStore(fileURL: storeURL)
+        var options = ConversionOptions.default
+        options.qualityProfile = .better
+        store.savePreset(name: "Archive Preset", options: options)
+
+        try store.exportPresets(to: exportURL)
+        let data = try Data(contentsOf: exportURL)
+        let archive = try JSONDecoder().decode(UserPresetArchive.self, from: data)
+        XCTAssertEqual(archive.schemaVersion, UserPresetArchive.currentSchemaVersion)
+        XCTAssertEqual(archive.presets.count, 1)
+
+        let importedStore = UserPresetStore(fileURL: importURL)
+        try importedStore.importPresets(from: exportURL)
+        XCTAssertEqual(importedStore.presets.count, 1)
+        XCTAssertEqual(importedStore.presets.first?.name, "Archive Preset")
     }
 
     func testDeletingSelectedUserPresetFallsBackToCustom() {

@@ -63,6 +63,7 @@ final class FFmpegCommandBuilderTests: XCTestCase {
                     index: 0,
                     codecName: "hevc",
                     codecLongName: "HEVC",
+                    profile: nil,
                     codecType: "video",
                     width: 3840,
                     height: 2160,
@@ -75,12 +76,14 @@ final class FFmpegCommandBuilderTests: XCTestCase {
                     colorPrimaries: nil,
                     channelLayout: nil,
                     sampleRate: nil,
-                    tags: nil
+                    tags: nil,
+                    sideDataList: nil
                 ),
                 .init(
                     index: 1,
                     codecName: "aac",
                     codecLongName: "AAC",
+                    profile: nil,
                     codecType: "audio",
                     width: nil,
                     height: nil,
@@ -93,7 +96,8 @@ final class FFmpegCommandBuilderTests: XCTestCase {
                     colorPrimaries: nil,
                     channelLayout: "stereo",
                     sampleRate: "48000",
-                    tags: nil
+                    tags: nil,
+                    sideDataList: nil
                 )
             ],
             chapters: []
@@ -152,28 +156,78 @@ final class FFmpegCommandBuilderTests: XCTestCase {
         XCTAssertTrue(combined.contains("-ac 8"))
     }
 
-    func testBuildArgumentsAppendsValidatedCustomArguments() {
+    func testCustomCommandTemplateValidationRequiresInputAndOutputPlaceholders() {
+        let missingInput = FFmpegCommandBuilder.validateCustomCommandTemplate(
+            "ffmpeg -hide_banner -c:v libx264 \"{output}\"",
+            enabled: true
+        )
+        XCTAssertNotNil(missingInput.errorMessage)
+
+        let missingOutput = FFmpegCommandBuilder.validateCustomCommandTemplate(
+            "ffmpeg -hide_banner -i \"{input}\" -c:v libx264",
+            enabled: true
+        )
+        XCTAssertNotNil(missingOutput.errorMessage)
+    }
+
+    func testBuildInvocationSubstitutesCustomTemplatePlaceholders() throws {
         var options = ConversionOptions.default
-        options.customFFmpegArguments = "-movflags +faststart -max_muxing_queue_size 2048"
-        let job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/custom_args.mov"), options: options)
+        options.isCustomCommandOverrideEnabled = true
+        options.customCommandTemplate = "ffmpeg -hide_banner -i \"{input}\" -c:v libx264 \"{output}\""
+        let inputURL = URL(fileURLWithPath: "/tmp/in sample.mov")
+        let job = VideoJob(sourceURL: inputURL, options: options)
+        let ffmpegURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
 
-        let arguments = FFmpegCommandBuilder.buildArguments(for: job, settings: .default)
-        let joined = arguments.joined(separator: " ")
+        let invocation = try FFmpegCommandBuilder.buildInvocation(
+            for: job,
+            ffmpegURL: ffmpegURL,
+            settings: .default
+        )
 
-        XCTAssertTrue(joined.contains("-movflags +faststart"))
-        XCTAssertTrue(joined.contains("-max_muxing_queue_size 2048"))
+        XCTAssertEqual(invocation.executableURL, ffmpegURL)
+        XCTAssertTrue(invocation.arguments.contains(inputURL.path))
+        XCTAssertTrue(invocation.commandLine.contains("/opt/homebrew/bin/ffmpeg"))
     }
 
-    func testCustomArgumentsBlockInputInjection() {
-        let validation = FFmpegCommandBuilder.validateCustomArguments("-i /tmp/other_input.mov -movflags +faststart")
-        XCTAssertEqual(validation.arguments, [])
-        XCTAssertNotNil(validation.errorMessage)
+    func testCustomCommandTokenizerPreservesQuotedSegments() {
+        let tokens = FFmpegCommandBuilder.tokenizeCommandTemplate(
+            "ffmpeg -i \"{input}\" -metadata title=\"My Movie\" \"{output}\""
+        )
+        XCTAssertEqual(tokens, ["ffmpeg", "-i", "{input}", "-metadata", "title=My Movie", "{output}"])
     }
 
-    func testCustomArgumentsBlockPositionalOutputInjection() {
-        let validation = FFmpegCommandBuilder.validateCustomArguments("-movflags +faststart hacked-output.mp4")
-        XCTAssertEqual(validation.arguments, [])
-        XCTAssertNotNil(validation.errorMessage)
+    func testBuildInvocationUsesNormalCommandBuilderWhenCustomTemplateDisabled() throws {
+        var options = ConversionOptions.default
+        options.isCustomCommandOverrideEnabled = false
+        options.customCommandTemplate = "ffmpeg -i \"{input}\" \"{output}\""
+        let job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/normal.mov"), options: options)
+        let ffmpegURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+
+        let invocation = try FFmpegCommandBuilder.buildInvocation(
+            for: job,
+            ffmpegURL: ffmpegURL,
+            settings: .default
+        )
+
+        XCTAssertEqual(invocation.executableURL, ffmpegURL)
+        XCTAssertTrue(invocation.arguments.contains("-i"))
+    }
+
+    func testBuildInvocationUsesResolvedFFmpegPathWhenTemplateStartsWithFFmpeg() throws {
+        var options = ConversionOptions.default
+        options.isCustomCommandOverrideEnabled = true
+        options.customCommandTemplate = "ffmpeg -hide_banner -i \"{input}\" -c:v libx264 \"{output}\""
+        let ffmpegURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+        let job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/custom.mov"), options: options)
+
+        let invocation = try FFmpegCommandBuilder.buildInvocation(
+            for: job,
+            ffmpegURL: ffmpegURL,
+            settings: .default
+        )
+
+        XCTAssertEqual(invocation.executableURL, ffmpegURL)
+        XCTAssertFalse(invocation.arguments.isEmpty)
     }
 
     func testBuildArgumentsUsesYOnlyWhenOverwriteEnabled() {
@@ -222,6 +276,169 @@ final class FFmpegCommandBuilderTests: XCTestCase {
         XCTAssertFalse(combined.contains("-disposition:s:"))
     }
 
+    func testBuildArgumentsAddsFaststartWhenWebOptimizationEnabledForMP4() {
+        var options = ConversionOptions.default
+        options.container = .mp4
+        options.webOptimization = true
+
+        let job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/web-faststart.mov"), options: options)
+        let arguments = FFmpegCommandBuilder.buildArguments(for: job, settings: .default)
+        let joined = arguments.joined(separator: " ")
+
+        XCTAssertTrue(joined.contains("-movflags +faststart"))
+    }
+
+    func testBuildArgumentsIgnoresFaststartWhenWebOptimizationEnabledForMKV() {
+        var options = ConversionOptions.default
+        options.container = .mkv
+        options.webOptimization = true
+
+        let job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/web-faststart.mkv"), options: options)
+        let arguments = FFmpegCommandBuilder.buildArguments(for: job, settings: .default)
+        let joined = arguments.joined(separator: " ")
+
+        XCTAssertFalse(joined.contains("-movflags +faststart"))
+    }
+
+    func testBuildArgumentsMapsMultipleExternalAudioTracksInOrder() {
+        var options = ConversionOptions.default
+        options.externalAudioAttachments = [
+            ExternalAudioAttachment(fileURL: URL(fileURLWithPath: "/tmp/voiceover.wav")),
+            ExternalAudioAttachment(fileURL: URL(fileURLWithPath: "/tmp/commentary.flac"))
+        ]
+
+        let job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/video.mov"), options: options)
+        let arguments = FFmpegCommandBuilder.buildArguments(for: job, settings: .default)
+        let joined = arguments.joined(separator: " ")
+
+        XCTAssertTrue(joined.contains("-i /tmp/video.mov"))
+        XCTAssertTrue(joined.contains("-i /tmp/voiceover.wav"))
+        XCTAssertTrue(joined.contains("-i /tmp/commentary.flac"))
+        XCTAssertTrue(joined.contains("-map 1:a:0?"))
+        XCTAssertTrue(joined.contains("-map 2:a:0?"))
+        XCTAssertTrue(arguments.contains("-shortest"))
+    }
+
+    func testBuildArgumentsMapsMultipleExternalSubtitlesAfterExternalAudioInputs() {
+        var options = ConversionOptions.default
+        options.subtitleMode = .addExternal
+        options.externalAudioAttachments = [
+            ExternalAudioAttachment(fileURL: URL(fileURLWithPath: "/tmp/voiceover.wav")),
+            ExternalAudioAttachment(fileURL: URL(fileURLWithPath: "/tmp/commentary.flac"))
+        ]
+        options.subtitleAttachments = [
+            SubtitleAttachment(fileURL: URL(fileURLWithPath: "/tmp/sub-en.srt"), languageCode: "eng"),
+            SubtitleAttachment(fileURL: URL(fileURLWithPath: "/tmp/sub-es.srt"), languageCode: "spa")
+        ]
+
+        var job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/video.mov"), options: options)
+        job.metadata = MediaMetadata(
+            format: .init(
+                filename: "/tmp/video.mov",
+                formatName: "mov",
+                formatLongName: "QuickTime / MOV",
+                duration: "120",
+                size: "1000",
+                bitRate: "1000",
+                tags: nil
+            ),
+            streams: [
+                .init(
+                    index: 0,
+                    codecName: "h264",
+                    codecLongName: nil,
+                    profile: nil,
+                    codecType: "video",
+                    width: 1920,
+                    height: 1080,
+                    pixFmt: nil,
+                    avgFrameRate: nil,
+                    rFrameRate: nil,
+                    bitRate: nil,
+                    colorTransfer: nil,
+                    colorSpace: nil,
+                    colorPrimaries: nil,
+                    channelLayout: nil,
+                    sampleRate: nil,
+                    tags: nil,
+                    sideDataList: nil
+                )
+            ],
+            chapters: []
+        )
+
+        let arguments = FFmpegCommandBuilder.buildArguments(for: job, settings: .default)
+        let joined = arguments.joined(separator: " ")
+
+        XCTAssertTrue(joined.contains("-map 3:0"))
+        XCTAssertTrue(joined.contains("-map 4:0"))
+        XCTAssertTrue(joined.contains("-metadata:s:s:0 language=eng"))
+        XCTAssertTrue(joined.contains("-metadata:s:s:1 language=spa"))
+    }
+
+    func testOutputSizeEstimatorKnownBitrateAndDuration() {
+        let bytes = OutputSizeEstimator.estimateFromTotalBitrate(
+            durationSeconds: 120,
+            totalBitrateBitsPerSecond: 8_000_000
+        )
+        XCTAssertEqual(bytes, 120_000_000)
+    }
+
+    func testOutputSizeEstimatorVeryFastProducesLargerEstimateThanSlowAtSameQuality() {
+        var fastOptions = ConversionOptions.default
+        fastOptions.videoCodec = .h264
+        fastOptions.qualityProfile = .balanced
+        fastOptions.encoderOption = .veryFast
+
+        var slowOptions = fastOptions
+        slowOptions.encoderOption = .slow
+
+        let fastEstimate = OutputSizeEstimator.estimate(for: makeEstimatorJob(options: fastOptions))
+        let slowEstimate = OutputSizeEstimator.estimate(for: makeEstimatorJob(options: slowOptions))
+
+        XCTAssertNotNil(fastEstimate)
+        XCTAssertNotNil(slowEstimate)
+        XCTAssertGreaterThan(fastEstimate?.outputBytes ?? 0, slowEstimate?.outputBytes ?? 0)
+    }
+
+    func testOutputSizeEstimatorDownscaleTo1080pReducesEstimate() {
+        var preserveOptions = ConversionOptions.default
+        preserveOptions.videoCodec = .hevc
+        preserveOptions.qualityProfile = .balanced
+        preserveOptions.resolutionOverride = .preserve
+
+        var downscaledOptions = preserveOptions
+        downscaledOptions.resolutionOverride = .preset1080p
+
+        let preserveEstimate = OutputSizeEstimator.estimate(for: makeEstimatorJob(options: preserveOptions))
+        let downscaledEstimate = OutputSizeEstimator.estimate(for: makeEstimatorJob(options: downscaledOptions))
+
+        XCTAssertNotNil(preserveEstimate)
+        XCTAssertNotNil(downscaledEstimate)
+        XCTAssertGreaterThan(preserveEstimate?.outputBytes ?? 0, downscaledEstimate?.outputBytes ?? 0)
+    }
+
+    func testOutputSizeEstimatorAudioCopyUsesKnownSourceAudioBitrate() {
+        var options = ConversionOptions.default
+        options.isAudioOnly = true
+        options.audioCodec = .copy
+
+        let estimate = OutputSizeEstimator.estimate(for: makeEstimatorJob(options: options))
+
+        XCTAssertEqual(estimate?.outputBytes, 2_880_000)
+    }
+
+    func testOutputSizeEstimatorUsesExplicitAudioBitrateSelection() {
+        var options = ConversionOptions.default
+        options.isAudioOnly = true
+        options.audioCodec = .aac
+        options.audioBitrateKbps = 256
+
+        let estimate = OutputSizeEstimator.estimate(for: makeEstimatorJob(options: options))
+
+        XCTAssertEqual(estimate?.outputBytes, 3_840_000)
+    }
+
     func testPresetMappingsForSoftwareCodecs() {
         let capabilities = FFmpegEncoderCapabilities(
             supportsX264: true,
@@ -263,17 +480,17 @@ final class FFmpegCommandBuilderTests: XCTestCase {
         )
         assertPreset(
             "MKV — VP9 (Balanced)",
-            expectedTokens: ["-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "32", "-row-mt", "1"],
+            expectedTokens: ["-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "32", "-cpu-used", "4", "-row-mt", "1"],
             capabilities: capabilities
         )
         assertPreset(
             "MKV — VP9 (High Quality)",
-            expectedTokens: ["-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "28", "-row-mt", "1"],
+            expectedTokens: ["-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "28", "-cpu-used", "2", "-row-mt", "1"],
             capabilities: capabilities
         )
         assertPreset(
             "MKV — AV1 (Balanced)",
-            expectedTokens: ["-c:v", "libsvtav1", "-crf", "30", "-preset", "6"],
+            expectedTokens: ["-c:v", "libsvtav1", "-crf", "30", "-preset", "5"],
             capabilities: capabilities
         )
         assertPreset(
@@ -308,7 +525,56 @@ final class FFmpegCommandBuilderTests: XCTestCase {
         let joined = args.joined(separator: " ")
         XCTAssertTrue(joined.contains("-c:v libaom-av1"))
         XCTAssertTrue(joined.contains("-crf 32"))
-        XCTAssertTrue(joined.contains("-cpu-used 6"))
+        XCTAssertTrue(joined.contains("-cpu-used 4"))
+    }
+
+    func testEncoderOptionVeryFastMapsToX264Preset() {
+        var options = ConversionOptions.default
+        options.videoCodec = .h264
+        options.useHardwareAcceleration = false
+        options.encoderOption = .veryFast
+        let job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/h264_speed.mov"), options: options)
+
+        var settings = AppSettings.default
+        settings.autoUseVideoToolbox = false
+        let args = FFmpegCommandBuilder.buildArguments(for: job, settings: settings)
+        let joined = args.joined(separator: " ")
+        XCTAssertTrue(joined.contains("-preset veryfast"))
+    }
+
+    func testEncoderOptionFastMapsToVP9CPUUsed5() {
+        var options = ConversionOptions.default
+        options.videoCodec = .vp9
+        options.container = .mkv
+        options.useHardwareAcceleration = false
+        options.encoderOption = .fast
+        let job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/vp9_speed.mkv"), options: options)
+
+        let args = FFmpegCommandBuilder.buildArguments(for: job, settings: .default)
+        let joined = args.joined(separator: " ")
+        XCTAssertTrue(joined.contains("-cpu-used 5"))
+    }
+
+    func testEncoderOptionSlowMapsToSVTAV1Preset4() {
+        var options = ConversionOptions.default
+        options.videoCodec = .av1
+        options.container = .mkv
+        options.useHardwareAcceleration = false
+        options.encoderOption = .slow
+        let job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/av1_speed.mkv"), options: options)
+        let capabilities = FFmpegEncoderCapabilities(
+            supportsX264: true,
+            supportsX265: true,
+            supportsVP9: true,
+            supportsSVTAV1: true,
+            supportsAOMAV1: true
+        )
+
+        var settings = AppSettings.default
+        settings.autoUseVideoToolbox = false
+        let args = FFmpegCommandBuilder.buildArguments(for: job, settings: settings, capabilities: capabilities)
+        let joined = args.joined(separator: " ")
+        XCTAssertTrue(joined.contains("-preset 4"))
     }
 
     private func assertPreset(
@@ -331,5 +597,65 @@ final class FFmpegCommandBuilderTests: XCTestCase {
         for token in expectedTokens {
             XCTAssertTrue(joined.contains(token), "Expected token '\(token)' in preset '\(presetName)'")
         }
+    }
+
+    private func makeEstimatorJob(options: ConversionOptions) -> VideoJob {
+        var job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/estimate-source.mov"), options: options)
+        job.inputFileSizeBytes = 240_000_000
+        job.metadata = MediaMetadata(
+            format: .init(
+                filename: "/tmp/estimate-source.mov",
+                formatName: "mov",
+                formatLongName: "QuickTime / MOV",
+                duration: "120.0",
+                size: "240000000",
+                bitRate: "16000000",
+                tags: nil
+            ),
+            streams: [
+                .init(
+                    index: 0,
+                    codecName: "h264",
+                    codecLongName: "H.264",
+                    profile: nil,
+                    codecType: "video",
+                    width: 3840,
+                    height: 2160,
+                    pixFmt: "yuv420p",
+                    avgFrameRate: "30000/1001",
+                    rFrameRate: "30000/1001",
+                    bitRate: "14000000",
+                    colorTransfer: nil,
+                    colorSpace: nil,
+                    colorPrimaries: nil,
+                    channelLayout: nil,
+                    sampleRate: nil,
+                    tags: nil,
+                    sideDataList: nil
+                ),
+                .init(
+                    index: 1,
+                    codecName: "aac",
+                    codecLongName: "AAC",
+                    profile: nil,
+                    codecType: "audio",
+                    width: nil,
+                    height: nil,
+                    pixFmt: nil,
+                    avgFrameRate: nil,
+                    rFrameRate: nil,
+                    bitRate: "192000",
+                    colorTransfer: nil,
+                    colorSpace: nil,
+                    colorPrimaries: nil,
+                    channelLayout: "stereo",
+                    sampleRate: "48000",
+                    tags: nil,
+                    sideDataList: nil
+                )
+            ],
+            chapters: []
+        )
+        return job
     }
 }

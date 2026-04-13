@@ -1,5 +1,7 @@
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
 
 # Xcode user data
 *.xcuserstate
@@ -9,19 +11,32 @@
 *.xcscmblueprint
 
 # Build output
+.build/
 DerivedData/
 build/
-.build/
-
-# Archives and artifacts
+*.xcresult
 *.xcarchive
-*.ipa
+*.dSYM
 *.dSYM.zip
+
+# Local release artifacts
+release/
+dist/
+artifacts/
 *.zip
-!app-icon.png
+*.dmg
+*.pkg
+*.sha256
 
 # Swift Package Manager
 .swiftpm/
 
-#Logs
+# Logs and temporary files
 logs/
+*.log
+*.tmp
+*.orig
+*.rej
+
+# Local tooling state
+.sparkle/
