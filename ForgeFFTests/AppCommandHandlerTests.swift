@@ -15,6 +15,7 @@ final class AppCommandHandlerTests: XCTestCase {
         handler.onRemoveSelected = { invocations.append("remove") }
         handler.onClearQueue = { invocations.append("clearQueue") }
         handler.onClearCompleted = { invocations.append("clearCompleted") }
+        handler.onToggleMoreSettings = { invocations.append("toggleMoreSettings") }
 
         handler.triggerAddFiles()
         handler.triggerAddFolder()
@@ -24,6 +25,7 @@ final class AppCommandHandlerTests: XCTestCase {
         handler.triggerRemoveSelected()
         handler.triggerClearQueue()
         handler.triggerClearCompleted()
+        handler.triggerToggleMoreSettings()
 
         XCTAssertEqual(invocations, [
             "addFiles",
@@ -33,7 +35,8 @@ final class AppCommandHandlerTests: XCTestCase {
             "cancel",
             "remove",
             "clearQueue",
-            "clearCompleted"
+            "clearCompleted",
+            "toggleMoreSettings"
         ])
     }
 }

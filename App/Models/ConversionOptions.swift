@@ -144,6 +144,11 @@ enum EncoderOption: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum VideoPixelFormat: String, Codable {
+    case automatic
+    case yuv420p
+}
+
 enum FrameRateOption: String, Codable, CaseIterable, Identifiable {
     case keep
     case fps24
@@ -252,6 +257,10 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
     let quality: QualityProfile
     let encoderOption: EncoderOption
     let enableHardwareAcceleration: Bool
+    let webOptimization: Bool
+    let videoPixelFormat: VideoPixelFormat
+    let audioBitrateKbps: Int?
+    let audioChannels: Int?
 
     init(
         id: UUID = UUID(),
@@ -264,7 +273,11 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
         audioCodec: AudioCodec,
         quality: QualityProfile,
         encoderOption: EncoderOption = .medium,
-        enableHardwareAcceleration: Bool
+        enableHardwareAcceleration: Bool,
+        webOptimization: Bool = false,
+        videoPixelFormat: VideoPixelFormat = .automatic,
+        audioBitrateKbps: Int? = nil,
+        audioChannels: Int? = nil
     ) {
         self.id = id
         self.name = name
@@ -277,6 +290,26 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
         self.quality = quality
         self.encoderOption = encoderOption
         self.enableHardwareAcceleration = enableHardwareAcceleration
+        self.webOptimization = webOptimization
+        self.videoPixelFormat = videoPixelFormat
+        self.audioBitrateKbps = audioBitrateKbps
+        self.audioChannels = audioChannels
+    }
+
+    static let telegramPresetName = "MP4 — Telegram"
+    static let efficientHEVCPresetName = "MP4 — Efficient HEVC"
+
+    static func builtIn(named name: String) -> ConversionPreset? {
+        let canonicalName: String
+        switch name {
+        case "MP4 — Telegram (Original Resolution)":
+            canonicalName = telegramPresetName
+        case "MP4 — Smallest File (HEVC)":
+            canonicalName = efficientHEVCPresetName
+        default:
+            canonicalName = name
+        }
+        return builtIns.first { $0.name == canonicalName }
     }
 
     static let builtIns: [ConversionPreset] = [
@@ -312,6 +345,36 @@ struct ConversionPreset: Codable, Hashable, Identifiable {
             quality: .better,
             encoderOption: .slow,
             enableHardwareAcceleration: false
+        ),
+        ConversionPreset(
+            name: telegramPresetName,
+            summary: "Telegram-ready: reliable playback at source resolution.",
+            tradeoff: "H.264 is larger than HEVC, but plays more consistently in Telegram.",
+            container: .mp4,
+            videoCodec: .h264,
+            audioCodec: .aac,
+            quality: .better,
+            encoderOption: .medium,
+            enableHardwareAcceleration: false,
+            webOptimization: true,
+            videoPixelFormat: .yuv420p,
+            audioBitrateKbps: 192,
+            audioChannels: 2
+        ),
+        ConversionPreset(
+            name: efficientHEVCPresetName,
+            summary: "Compact HEVC: Telegram-style settings at source resolution.",
+            tradeoff: "Smaller than H.264, but playback support is less universal.",
+            container: .mp4,
+            videoCodec: .hevc,
+            audioCodec: .aac,
+            quality: .better,
+            encoderOption: .medium,
+            enableHardwareAcceleration: false,
+            webOptimization: true,
+            videoPixelFormat: .yuv420p,
+            audioBitrateKbps: 192,
+            audioChannels: 2
         ),
         ConversionPreset(
             name: "MP4 — HEVC (Fast)",
@@ -464,6 +527,7 @@ struct ConversionOptions: Codable, Equatable {
     var audioCodec: AudioCodec
     var qualityProfile: QualityProfile
     var encoderOption: EncoderOption?
+    var videoPixelFormat: VideoPixelFormat
     var resolutionOverride: ResolutionOverride
     var frameRateOption: FrameRateOption
     var customFrameRate: Double?
@@ -496,6 +560,7 @@ struct ConversionOptions: Codable, Equatable {
         case audioCodec
         case qualityProfile
         case encoderOption
+        case videoPixelFormat
         case resolutionOverride
         case frameRateOption
         case customFrameRate
@@ -528,6 +593,7 @@ struct ConversionOptions: Codable, Equatable {
         audioCodec: AudioCodec,
         qualityProfile: QualityProfile,
         encoderOption: EncoderOption?,
+        videoPixelFormat: VideoPixelFormat,
         resolutionOverride: ResolutionOverride,
         frameRateOption: FrameRateOption,
         customFrameRate: Double?,
@@ -557,6 +623,7 @@ struct ConversionOptions: Codable, Equatable {
         self.audioCodec = audioCodec
         self.qualityProfile = qualityProfile
         self.encoderOption = encoderOption
+        self.videoPixelFormat = videoPixelFormat
         self.resolutionOverride = resolutionOverride
         self.frameRateOption = frameRateOption
         self.customFrameRate = customFrameRate
@@ -588,6 +655,7 @@ struct ConversionOptions: Codable, Equatable {
         audioCodec: .aac,
         qualityProfile: .balanced,
         encoderOption: nil,
+        videoPixelFormat: .automatic,
         resolutionOverride: .preserve,
         frameRateOption: .keep,
         customFrameRate: nil,
@@ -599,8 +667,8 @@ struct ConversionOptions: Codable, Equatable {
         subtitleAttachments: [],
         externalAudioAttachments: [],
         enableHDRToSDR: false,
-        toneMapMode: .hable,
-        toneMapPeak: 1000,
+        toneMapMode: .reinhard,
+        toneMapPeak: 100,
         webOptimization: false,
         outputTemplate: "{name}_{preset}",
         videoBitrateKbps: nil,
@@ -619,18 +687,20 @@ struct ConversionOptions: Codable, Equatable {
         audioCodec = preset.audioCodec
         qualityProfile = preset.quality
         encoderOption = preset.encoderOption
+        videoPixelFormat = preset.videoPixelFormat
         useHardwareAcceleration = preset.enableHardwareAcceleration
         resolutionOverride = .preserve
         frameRateOption = .keep
         customFrameRate = nil
-        audioBitrateKbps = nil
-        audioChannels = nil
+        audioBitrateKbps = preset.audioBitrateKbps
+        audioChannels = preset.audioChannels
         sampleRate = nil
         removeMetadata = false
         removeChapters = false
         enableHDRToSDR = false
-        toneMapMode = .hable
-        webOptimization = false
+        toneMapMode = .reinhard
+        toneMapPeak = 100
+        webOptimization = preset.webOptimization
         outputTemplate = "{name}_{preset}"
         subtitleMode = .keep
         removeEmbeddedSubtitles = false
@@ -697,6 +767,7 @@ struct ConversionOptions: Codable, Equatable {
         audioCodec = try container.decodeIfPresent(AudioCodec.self, forKey: .audioCodec) ?? defaults.audioCodec
         qualityProfile = try container.decodeIfPresent(QualityProfile.self, forKey: .qualityProfile) ?? defaults.qualityProfile
         encoderOption = try container.decodeIfPresent(EncoderOption.self, forKey: .encoderOption)
+        videoPixelFormat = try container.decodeIfPresent(VideoPixelFormat.self, forKey: .videoPixelFormat) ?? defaults.videoPixelFormat
         resolutionOverride = try container.decodeIfPresent(ResolutionOverride.self, forKey: .resolutionOverride) ?? defaults.resolutionOverride
         frameRateOption = try container.decodeIfPresent(FrameRateOption.self, forKey: .frameRateOption) ?? defaults.frameRateOption
         customFrameRate = try container.decodeIfPresent(Double.self, forKey: .customFrameRate)
@@ -735,6 +806,7 @@ struct ConversionOptions: Codable, Equatable {
         try container.encode(audioCodec, forKey: .audioCodec)
         try container.encode(qualityProfile, forKey: .qualityProfile)
         try container.encodeIfPresent(encoderOption, forKey: .encoderOption)
+        try container.encode(videoPixelFormat, forKey: .videoPixelFormat)
         try container.encode(resolutionOverride, forKey: .resolutionOverride)
         try container.encode(frameRateOption, forKey: .frameRateOption)
         try container.encodeIfPresent(customFrameRate, forKey: .customFrameRate)

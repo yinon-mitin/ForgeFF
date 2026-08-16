@@ -10,6 +10,7 @@ final class AppCommandHandler: ObservableObject {
     var onRemoveSelected: () -> Void = {}
     var onClearQueue: () -> Void = {}
     var onClearCompleted: () -> Void = {}
+    var onToggleMoreSettings: () -> Void = {}
 
     func triggerAddFiles() { onAddFiles() }
     func triggerAddFolder() { onAddFolder() }
@@ -19,4 +20,5 @@ final class AppCommandHandler: ObservableObject {
     func triggerRemoveSelected() { onRemoveSelected() }
     func triggerClearQueue() { onClearQueue() }
     func triggerClearCompleted() { onClearCompleted() }
+    func triggerToggleMoreSettings() { onToggleMoreSettings() }
 }

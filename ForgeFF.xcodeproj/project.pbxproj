@@ -35,6 +35,8 @@
 		00100000000000000000002C /* DockProgressController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000002C /* DockProgressController.swift */; };
 		00100000000000000000002D /* HelpTopics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000002D /* HelpTopics.swift */; };
 		00100000000000000000002E /* BuildIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000002E /* BuildIdentity.swift */; };
+		00100000000000000000002F /* AVConvertSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000002F /* AVConvertSupport.swift */; };
+		001000000000000000000030 /* AVConvertRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000030 /* AVConvertRunner.swift */; };
 		001000000000000000000015 /* FilenameRenamerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000015 /* FilenameRenamerTests.swift */; };
 		001000000000000000000016 /* FFprobeParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000016 /* FFprobeParserTests.swift */; };
 		001000000000000000000017 /* FFmpegCommandBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000017 /* FFmpegCommandBuilderTests.swift */; };
@@ -93,6 +95,8 @@
 		00200000000000000000002C /* DockProgressController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockProgressController.swift; sourceTree = "<group>"; };
 		00200000000000000000002D /* HelpTopics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpTopics.swift; sourceTree = "<group>"; };
 		00200000000000000000002E /* BuildIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildIdentity.swift; sourceTree = "<group>"; };
+		00200000000000000000002F /* AVConvertSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AVConvertSupport.swift; sourceTree = "<group>"; };
+		002000000000000000000030 /* AVConvertRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AVConvertRunner.swift; sourceTree = "<group>"; };
 		00200000000000000000001C /* FFmpegPathDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFmpegPathDetectorTests.swift; sourceTree = "<group>"; };
 			00200000000000000000001D /* AppCommandHandlerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCommandHandlerTests.swift; sourceTree = "<group>"; };
 			002000000000000000000027 /* SecurityScopedBookmarkStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityScopedBookmarkStoreTests.swift; sourceTree = "<group>"; };
@@ -201,6 +205,8 @@
 				002000000000000000000023 /* FFmpegEncoderCapabilities.swift */,
 				002000000000000000000026 /* SecurityScopedBookmarkStore.swift */,
 				00200000000000000000000A /* FFmpegRunner.swift */,
+				00200000000000000000002F /* AVConvertSupport.swift */,
+				002000000000000000000030 /* AVConvertRunner.swift */,
 				00200000000000000000000B /* JobQueueStore.swift */,
 				00200000000000000000001A /* FFmpegPathDetection.swift */,
 				00200000000000000000001B /* AppCommandHandler.swift */,
@@ -364,6 +370,8 @@
 				001000000000000000000023 /* FFmpegEncoderCapabilities.swift in Sources */,
 				001000000000000000000026 /* SecurityScopedBookmarkStore.swift in Sources */,
 				00100000000000000000000A /* FFmpegRunner.swift in Sources */,
+				00100000000000000000002F /* AVConvertSupport.swift in Sources */,
+				001000000000000000000030 /* AVConvertRunner.swift in Sources */,
 				00100000000000000000000B /* JobQueueStore.swift in Sources */,
 				00100000000000000000000C /* QueueViewModel.swift in Sources */,
 				00100000000000000000000D /* RootView.swift in Sources */,
@@ -417,7 +425,7 @@
 					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 					CODE_SIGN_ENTITLEMENTS = ForgeFF/ForgeFF.entitlements;
 					CODE_SIGN_STYLE = Automatic;
-					CURRENT_PROJECT_VERSION = 200;
+					CURRENT_PROJECT_VERSION = 261;
 					DEVELOPMENT_TEAM = "";
 					ENABLE_TESTABILITY = YES;
 					ENABLE_HARDENED_RUNTIME = YES;
@@ -428,7 +436,7 @@
 						"@executable_path/../Frameworks",
 					);
 					MACOSX_DEPLOYMENT_TARGET = 13.0;
-					MARKETING_VERSION = 2.0.0;
+					MARKETING_VERSION = 2.6.1;
 					PRODUCT_BUNDLE_IDENTIFIER = com.yinonmitin.ForgeFF;
 					PRODUCT_NAME = "$(TARGET_NAME)";
 					SDKROOT = macosx;
@@ -443,7 +451,7 @@
 					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 					CODE_SIGN_ENTITLEMENTS = ForgeFF/ForgeFF.entitlements;
 					CODE_SIGN_STYLE = Automatic;
-					CURRENT_PROJECT_VERSION = 200;
+					CURRENT_PROJECT_VERSION = 261;
 					DEVELOPMENT_TEAM = "";
 					ENABLE_HARDENED_RUNTIME = YES;
 					GENERATE_INFOPLIST_FILE = NO;
@@ -453,7 +461,7 @@
 						"@executable_path/../Frameworks",
 					);
 					MACOSX_DEPLOYMENT_TARGET = 13.0;
-					MARKETING_VERSION = 2.0.0;
+					MARKETING_VERSION = 2.6.1;
 					PRODUCT_BUNDLE_IDENTIFIER = com.yinonmitin.ForgeFF;
 					PRODUCT_NAME = "$(TARGET_NAME)";
 					SDKROOT = macosx;
@@ -467,7 +475,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 200;
+				CURRENT_PROJECT_VERSION = 261;
 				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -476,7 +484,7 @@
 					"@loader_path/../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.6.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yinonmitin.ForgeFFTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -490,7 +498,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 200;
+				CURRENT_PROJECT_VERSION = 261;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -498,7 +506,7 @@
 					"@loader_path/../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.6.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yinonmitin.ForgeFFTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;

@@ -14,6 +14,7 @@ struct MainWindowView: View {
     @State private var isFileImporterPresented = false
     @State private var isDropTargeted = false
     @State private var isClearConfirmationPresented = false
+    @State private var inspectedFailureJobID: UUID?
     @State private var splitViewVisibility: NavigationSplitViewVisibility = .all
     @State private var quickLookKeyMonitor: Any?
     @StateObject private var quickLookController = QueueQuickLookController()
@@ -27,25 +28,45 @@ struct MainWindowView: View {
             )
                 .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 380)
         } detail: {
-            VStack(spacing: 0) {
-                QueueListView(
-                    viewModel: viewModel,
-                    isDropTargeted: $isDropTargeted,
-                    onAddFiles: { isFileImporterPresented = true },
-                    onAddFolder: chooseFolder
-                )
-                .onDrop(
-                    of: [
-                        UTType.fileURL.identifier,
-                        UTType.movie.identifier,
-                        UTType.video.identifier,
-                        UTType.audio.identifier
-                    ],
-                    isTargeted: $isDropTargeted,
-                    perform: handleDrop
-                )
-                Divider()
-                footer
+            HSplitView {
+                VStack(spacing: 0) {
+                    QueueListView(
+                        viewModel: viewModel,
+                        isDropTargeted: $isDropTargeted,
+                        inspectedFailureJobID: $inspectedFailureJobID,
+                        onAddFiles: { isFileImporterPresented = true },
+                        onAddFolder: chooseFolder
+                    )
+                    .onDrop(
+                        of: [
+                            UTType.fileURL.identifier,
+                            UTType.movie.identifier,
+                            UTType.video.identifier,
+                            UTType.audio.identifier
+                        ],
+                        isTargeted: $isDropTargeted,
+                        perform: handleDrop
+                    )
+                    Divider()
+                    footer
+                }
+                .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
+
+                if let inspectedFailureJob {
+                    QueueFailureInspectorView(
+                        job: inspectedFailureJob,
+                        onClose: { inspectedFailureJobID = nil },
+                        onRetry: {
+                            queueStore.retry(jobID: inspectedFailureJob.id)
+                            inspectedFailureJobID = nil
+                            viewModel.refreshDraftOptions()
+                        },
+                        onOpenSource: { queueStore.openSource(for: inspectedFailureJob.id) },
+                        onRevealOutput: { queueStore.revealOutput(for: inspectedFailureJob.id) },
+                        onOpenOutputFolder: { queueStore.openOutputFolder(for: inspectedFailureJob.id) }
+                    )
+                    .frame(minWidth: 300, idealWidth: 360, maxWidth: 480, maxHeight: .infinity)
+                }
             }
             .background(Color(nsColor: .windowBackgroundColor))
         }
@@ -63,20 +84,16 @@ struct MainWindowView: View {
                 viewModel.refreshDraftOptions()
             }
         }
-        .confirmationDialog("Clear Queue", isPresented: $isClearConfirmationPresented, titleVisibility: .visible) {
-            Button("Clear only queued items") {
-                queueStore.clearQueuedItems()
-                viewModel.selectedJobIDs = viewModel.selectedJobIDs.intersection(Set(queueStore.jobs.map(\.id)))
-                viewModel.refreshDraftOptions()
-            }
-            Button("Clear everything (queued + completed + failed)") {
+        .confirmationDialog("Clear Entire Queue?", isPresented: $isClearConfirmationPresented, titleVisibility: .visible) {
+            Button("Clear Entire Queue", role: .destructive) {
                 queueStore.clearAllItems()
                 viewModel.selectedJobIDs.removeAll()
+                inspectedFailureJobID = nil
                 viewModel.refreshDraftOptions()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Choose what to remove from the queue.")
+            Text("This removes queued, completed, failed, and cancelled items. Running work will be stopped.")
         }
         .sheet(isPresented: $settingsStore.shouldShowFFmpegSetup) {
             FFmpegSetupView()
@@ -105,17 +122,23 @@ struct MainWindowView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            Menu("Add…") {
-                Button("Add Files…") {
+            Menu {
+                Button(queueStore.acceptsLiveQueueAdditions ? "Add Files to Queue…" : "Add Files…") {
                     isFileImporterPresented = true
                 }
                 .keyboardShortcut("o", modifiers: [.command])
 
-                Button("Add Folder…") {
+                Button(queueStore.acceptsLiveQueueAdditions ? "Add Folder to Queue…" : "Add Folder…") {
                     chooseFolder()
                 }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "plus")
+                    Text(queueStore.acceptsLiveQueueAdditions ? "Add to Queue…" : "Add…")
+                }
             }
+            .help(queueStore.acceptsLiveQueueAdditions ? "Add files behind the jobs already in progress." : "Add files or a folder.")
 
             Button("Output Folder") {
                 queueStore.chooseOutputDirectory()
@@ -144,10 +167,26 @@ struct MainWindowView: View {
             }
             .disabled(!queueStore.canCancel(selectedJobIDs: viewModel.selectedJobIDs))
 
-            Button("Clear") {
-                isClearConfirmationPresented = true
+            Menu {
+                Button("Clear Finished Results") {
+                    queueStore.clearCompletedResults()
+                    reconcileSelectionAfterClear()
+                }
+                .disabled(!queueStore.hasCompletedResults)
+
+                Divider()
+
+                Button("Clear Entire Queue…", role: .destructive) {
+                    isClearConfirmationPresented = true
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "trash")
+                    Text("Clear Finished")
+                }
             }
-            .disabled(!queueStore.hasClearableQueueItems && !queueStore.hasCompletedResults)
+            .disabled(queueStore.jobs.isEmpty)
+            .help("Remove completed, failed, and cancelled results, or clear the entire queue from the menu.")
         }
 
         ToolbarItem(placement: .automatic) {
@@ -167,10 +206,6 @@ struct MainWindowView: View {
     private var footer: some View {
         let summary = queueStore.footerSummary
         return HStack(spacing: 14) {
-            Text("In queue: \(summary.queued)")
-            Text("Processing: \(summary.processing)")
-            Text("Done: \(summary.done)")
-            Text("Failed: \(summary.failed)")
             Text("Input: \(FileSizeFormatterUtil.string(from: summary.totalInputSizeBytes))")
             Text("Elapsed: \(queueStore.queueElapsedDisplay)")
             if summary.failed > 0 {
@@ -203,7 +238,28 @@ struct MainWindowView: View {
         commandHandler.onCancelQueue = { queueStore.cancelCurrentJob(selectedJobIDs: viewModel.selectedJobIDs) }
         commandHandler.onRemoveSelected = { viewModel.removeSelectedJobs() }
         commandHandler.onClearQueue = { isClearConfirmationPresented = true }
-        commandHandler.onClearCompleted = { queueStore.clearCompletedResults() }
+        commandHandler.onClearCompleted = {
+            queueStore.clearCompletedResults()
+            reconcileSelectionAfterClear()
+        }
+    }
+
+    private var inspectedFailureJob: VideoJob? {
+        guard let inspectedFailureJobID,
+              let job = queueStore.jobs.first(where: { $0.id == inspectedFailureJobID }),
+              job.status == .failed || job.status == .cancelled else {
+            return nil
+        }
+        return job
+    }
+
+    private func reconcileSelectionAfterClear() {
+        let validIDs = Set(queueStore.jobs.map(\.id))
+        viewModel.selectedJobIDs.formIntersection(validIDs)
+        if let inspectedFailureJobID, !validIDs.contains(inspectedFailureJobID) {
+            self.inspectedFailureJobID = nil
+        }
+        viewModel.refreshDraftOptions()
     }
 
     private func chooseFolder() {
@@ -212,7 +268,7 @@ struct MainWindowView: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [.folder]
-        panel.prompt = "Add"
+        panel.prompt = queueStore.acceptsLiveQueueAdditions ? "Add to Queue" : "Add"
         if panel.runModal() == .OK, let url = panel.url {
             queueStore.addFolder(url: url)
             viewModel.refreshDraftOptions()

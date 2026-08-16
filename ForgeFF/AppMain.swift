@@ -64,15 +64,23 @@ private struct ForgeFFCommands: Commands {
             Button("About ForgeFF") {
                 openWindow(id: "about-forgeff")
             }
+            .keyboardShortcut("/", modifiers: [.command])
+        }
+
+        CommandGroup(replacing: .appSettings) {
+            Button("Toggle More Settings") {
+                commandHandler.triggerToggleMoreSettings()
+            }
+            .keyboardShortcut(",", modifiers: [.command])
         }
 
         CommandGroup(after: .newItem) {
-            Button("Add Files") {
+            Button(queueStore.acceptsLiveQueueAdditions ? "Add Files to Queue" : "Add Files") {
                 commandHandler.triggerAddFiles()
             }
             .keyboardShortcut("o")
 
-            Button("Add Folder") {
+            Button(queueStore.acceptsLiveQueueAdditions ? "Add Folder to Queue" : "Add Folder") {
                 commandHandler.triggerAddFolder()
             }
             .keyboardShortcut("o", modifiers: [.command, .shift])

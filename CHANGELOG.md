@@ -3,6 +3,126 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.6.1] - 2026-08-16
+
+### Added
+
+- VP9 and AV1 balanced presets are now available directly in the primary preset list; unavailable encoders are clearly marked and cannot be selected.
+
+### Changed
+
+- `Telegram (Original Resolution)` is now named `Telegram` while continuing to preserve the source resolution and frame rate.
+- The compact Telegram-style HEVC preset is now named `Efficient HEVC` and replaces the older primary HEVC card.
+- `Editing ProRes` is kept as the final primary preset.
+
+### Fixed
+
+- Selected running queue rows keep readable titles, metadata, badges, and actions on light selection backgrounds by using explicit adaptive macOS label and link colors.
+
+## [2.6.0] - 2026-08-16
+
+### Added
+
+- A compact live queue summary above the job list with running, queued, completed, failed, and current FPS information.
+- A dedicated right-side failure inspector for error logs, FFmpeg version details, executed commands, retry actions, and source/output shortcuts.
+
+### Changed
+
+- The toolbar is now the single primary place to add files while a non-empty queue is visible; the empty state keeps its contextual import action.
+- `Clear` is now the explicit `Clear Finished` menu, with a separate confirmed action for clearing the entire queue.
+- Start and More/Less Settings remain pinned at the bottom of the sidebar while detailed settings scroll independently.
+- Primary preset cards are shorter and visually lighter, keeping more of the common workflow visible at once.
+- Failed and cancelled queue rows stay compact because verbose diagnostics no longer expand inline.
+
+## [2.5.0] - 2026-08-16
+
+### Added
+
+- Live FFmpeg processing speed in frames per second on running and paused queue rows.
+- A `Smallest File / Web Share` HEVC preset that mirrors the Telegram preset's quality, encoder, source resolution/FPS, AAC stereo, 4:2:0, and web-optimization settings.
+- `Command-/` opens the About window, and `Command-,` toggles the More Settings section.
+
+### Changed
+
+- The primary `Smallest File / Web Share` card now consistently produces an MP4 HEVC file instead of selecting AV1 or VP9 based on local encoder availability.
+
+### Fixed
+
+- Selected queue rows now use a subtle accent tint with semantic text colors, preventing titles, metadata, FPS, and actions from disappearing when macOS supplies a light or inactive selection background.
+
+## [2.4.0] - 2026-08-16
+
+### Added
+
+- Per-file conversion time on completed, failed, and cancelled queue rows.
+- Final output size shown as a percentage of the original input size.
+
+### Improved
+
+- Initial size estimates continue to use codec, quality, resolution, FPS, and source-bitrate characteristics without assuming a fixed correction factor.
+- While encoding, ForgeFF progressively refines the predicted final size from FFmpeg's actual bytes written and encoded duration, giving VBR and quality-based jobs a more accurate estimate as they advance.
+
+### Fixed
+
+- Final FFmpeg status lines with `time=N/A` no longer reset progress to 0% during muxing or file finalization.
+- Queue progress is monotonic and cannot move backwards after reaching a later stage.
+
+## [2.3.0] - 2026-08-16
+
+### Added
+
+- Live queue admission: files and folders added during a running or paused batch automatically join the active queue.
+- Context-aware `Add to Queue…` controls in both the main toolbar and queue header.
+- A reproducible build, launch, debug, log, telemetry, and smoke-test script for local development.
+
+### Improved
+
+- FFprobe metadata analysis and FFmpeg version checks now complete asynchronously without blocking the main interface thread.
+- FFmpeg and Apple converter progress delivery is rate-limited to reduce UI work during high-throughput encodes.
+- ForgeFF waits for newly added files to finish metadata analysis before deciding that the active queue is complete.
+
+### Fixed
+
+- Files added to a selection-scoped run now join that live run instead of remaining outside the active queue.
+- The app remains interactive more reliably while FFmpeg is consuming substantial CPU, GPU, memory, or disk resources.
+
+## [2.2.0] - 2026-08-16
+
+### Added
+
+- A dedicated `Telegram (Original Resolution)` preset for camera footage and other large sources.
+- Telegram-safe H.264 output with 8-bit 4:2:0 pixels, AAC stereo audio, source resolution/FPS preservation, and MP4 fast-start metadata.
+
+### Improved
+
+- HEVC exports in MP4 and MOV use the broadly compatible `hvc1` codec tag.
+- Presets can now carry web-optimization, pixel-format, audio bitrate, and channel defaults as part of their saved configuration.
+
+### Fixed
+
+- Sony and other 4:2:2 camera sources no longer inherit a pixel format that Telegram clients may fail to decode when the Telegram preset is used.
+- MP4 outputs created for Telegram can begin playback before the entire file is downloaded.
+
+## [2.1.0] - 2026-04-15
+
+### Added
+
+- Tone-mapping engine selection so HDR to SDR jobs can use Apple VideoToolbox or FFmpeg filters when both are available.
+- Release packaging updates for a local `release/ForgeFF-2.1.0-macOS.zip` archive and matching GitHub Release asset naming.
+
+### Improved
+
+- Sidebar helper, warning, and description copy now wraps cleanly instead of truncating in narrow widths.
+- Output folder controls are cleaner, with inline source-folder reset and Finder reveal actions beside the default-folder picker.
+- README release notes now describe the two tone-mapping engines and the current release archive naming.
+
+### Fixed
+
+- Tone-mapping backend selection now persists without resetting unrelated settings, and unsupported FFmpeg filter builds fall back to Apple with a clear inline explanation.
+- The duplicate output heading/path presentation in the sidebar was removed.
+- The external audio add button keeps a normal enabled appearance when the app is inactive.
+- The rename apply action now matches the rest of the app’s subtler bordered button style.
+
 ## [2.0.0] - 2026-04-13
 
 ### Added

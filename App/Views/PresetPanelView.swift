@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct PresetOptionsPanelView: View {
     @EnvironmentObject private var queueStore: JobQueueStore
     @EnvironmentObject private var settingsStore: SettingsStore
+    @EnvironmentObject private var commandHandler: AppCommandHandler
 
     @ObservedObject var viewModel: QueueViewModel
     let isSidebarVisible: Bool
@@ -20,6 +21,7 @@ struct PresetOptionsPanelView: View {
     @State private var isRenameExpanded = false
     @State private var isDefaultOutputFolderDropTargeted = false
     @State private var isSelectionOutputFolderDropTargeted = false
+    @State private var isToneMapSupportHelpPresented = false
     @StateObject private var sidebarFocusRouter = SidebarFocusRouter()
     @FocusState private var focusedField: FocusField?
 
@@ -36,20 +38,27 @@ struct PresetOptionsPanelView: View {
                 List {
                     presetsSection
                     simpleDefaultsSection
-                    primaryActionSection
-                    moreSettingsSection
+                    if isMoreSettingsExpanded {
+                        moreSettingsContentSection
+                    }
                 }
                 .listStyle(.sidebar)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textFieldStyle(.roundedBorder)
                 .navigationTitle("Options")
                 .background(Color.clear)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    pinnedSidebarActions
+                }
                 .onAppear {
                     syncCustomInputsFromOptions()
                     refreshCustomValidationState()
                     normalizeVideoCodecSelection()
                     sidebarFocusRouter.configureOrder(focusOrder, logicalIsEnabled: isFocusTargetEnabled)
                     sidebarFocusRouter.setSidebarVisible(isSidebarVisible)
+                    commandHandler.onToggleMoreSettings = {
+                        isMoreSettingsExpanded.toggle()
+                    }
                     sidebarFocusRouter.setCoarseScrollRequest { target, anchor in
                         let _ = anchor
                         if isPresetHeaderTarget(target) {
@@ -69,6 +78,7 @@ struct PresetOptionsPanelView: View {
                     }
                 }
                 .onDisappear {
+                    commandHandler.onToggleMoreSettings = {}
                     sidebarFocusRouter.detach()
                 }
                 .onChange(of: viewModel.draftOptions.resolutionOverride) { _ in
@@ -130,6 +140,27 @@ struct PresetOptionsPanelView: View {
                 .onChange(of: settingsStore.encoderCapabilities) { _ in
                     normalizeVideoCodecSelection()
                     sidebarFocusRouter.configureOrder(focusOrder, logicalIsEnabled: isFocusTargetEnabled)
+                }
+                .onChange(of: settingsStore.filterCapabilities) { _ in
+                    sidebarFocusRouter.configureOrder(focusOrder, logicalIsEnabled: isFocusTargetEnabled)
+                    sidebarFocusRouter.reconcileFocus(
+                        reason: "Tone mapping capabilities changed",
+                        preferredFallback: viewModel.draftOptions.enableHDRToSDR ? .hdrToneMappingEngine : .hdrEnable
+                    )
+                }
+                .onChange(of: settingsStore.avconvertCapabilities) { _ in
+                    sidebarFocusRouter.configureOrder(focusOrder, logicalIsEnabled: isFocusTargetEnabled)
+                    sidebarFocusRouter.reconcileFocus(
+                        reason: "Apple tone mapping availability changed",
+                        preferredFallback: viewModel.draftOptions.enableHDRToSDR ? .hdrToneMappingEngine : .hdrEnable
+                    )
+                }
+                .onChange(of: settingsStore.settings.preferredToneMappingBackendRawValue) { _ in
+                    sidebarFocusRouter.configureOrder(focusOrder, logicalIsEnabled: isFocusTargetEnabled)
+                    sidebarFocusRouter.reconcileFocus(
+                        reason: "Tone mapping engine changed",
+                        preferredFallback: viewModel.draftOptions.enableHDRToSDR ? .hdrToneMappingEngine : .hdrEnable
+                    )
                 }
                 .onChange(of: viewModel.isAdvancedExpanded) { _ in
                     if !viewModel.isAdvancedExpanded,
@@ -279,12 +310,14 @@ struct PresetOptionsPanelView: View {
     private var presetsSection: AnyView {
         AnyView(
             Section("Presets") {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Pick a preset, then start. Open More Settings only when you need to fine-tune it.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 9) {
+                    sidebarReadableText(
+                        "Pick a preset, then start. Open More Settings only when you need to fine-tune it.",
+                        font: .caption,
+                        color: .secondary
+                    )
 
-                    VStack(spacing: 10) {
+                    VStack(spacing: 7) {
                         ForEach(primaryPresetCards) { card in
                             FocusableContainer(
                                 router: sidebarFocusRouter,
@@ -297,6 +330,8 @@ struct PresetOptionsPanelView: View {
                                     presetCard(for: card)
                                 }
                                 .buttonStyle(.plain)
+                                .disabled(isPrimaryPresetUnavailable(card))
+                                .help(primaryPresetHelpText(card))
                             }
                         }
                     }
@@ -337,166 +372,195 @@ struct PresetOptionsPanelView: View {
             Section("Output") {
                 outputSummaryView
 
-                FocusableContainer(
-                    router: sidebarFocusRouter,
-                    target: .chooseDefaultOutputFolder,
-                    onKeyDown: buttonKeyHandler {
-                        settingsStore.chooseDefaultOutputDirectory()
-                        queueStore.applyDefaultOutputDirectoryToUnsetJobs()
-                    }
+                outputActionCardContainer(
+                    isDropTargeted: isDefaultOutputFolderDropTargeted
                 ) {
-                    Button {
-                        settingsStore.chooseDefaultOutputDirectory()
-                        queueStore.applyDefaultOutputDirectoryToUnsetJobs()
-                    } label: {
-                        outputActionButtonLabel(
-                            title: "Choose default folder",
-                            subtitle: "Click or drop a folder for new exports.",
-                            systemImage: "folder.badge.gearshape",
-                            isDropTargeted: isDefaultOutputFolderDropTargeted
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .onDrop(
-                        of: folderDropTypeIdentifiers,
-                        isTargeted: $isDefaultOutputFolderDropTargeted,
-                        perform: handleDefaultOutputFolderDrop
-                    )
-                }
-                .help("Choose or drop a folder for new exports. Leave it empty to save beside each source file.")
-
-                if settingsStore.defaultOutputDirectoryURL != nil {
-                    FocusableContainer(
-                        router: sidebarFocusRouter,
-                        target: .resetDefaultOutputFolder,
-                        onKeyDown: buttonKeyHandler {
-                            settingsStore.resetDefaultOutputDirectory()
-                        }
-                    ) {
-                        Button {
-                            settingsStore.resetDefaultOutputDirectory()
-                        } label: {
-                            pillActionButtonLabel(
-                                "Use source folder",
-                                systemImage: "arrow.uturn.backward",
-                                prominence: .subtle
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .help("Clear the default folder so exports save beside each source file.")
-                }
-
-                if !viewModel.selectedJobIDs.isEmpty {
-                    FocusableContainer(
-                        router: sidebarFocusRouter,
-                        target: .chooseOutputFolderForSelection,
-                        isEnabled: true,
-                        onKeyDown: buttonKeyHandler {
-                            queueStore.chooseOutputDirectory(for: viewModel.selectedJobIDs)
-                        }
-                    ) {
-                        Button {
-                            queueStore.chooseOutputDirectory(for: viewModel.selectedJobIDs)
-                        } label: {
-                            outputActionButtonLabel(
-                                title: "Choose folder for selection",
-                                subtitle: "Click or drop a folder for the selected item" + (viewModel.selectedJobIDs.count == 1 ? "." : "s."),
-                                systemImage: "folder.badge.person.crop",
-                                isDropTargeted: isSelectionOutputFolderDropTargeted
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .onDrop(
-                            of: folderDropTypeIdentifiers,
-                            isTargeted: $isSelectionOutputFolderDropTargeted,
-                            perform: handleSelectionOutputFolderDrop
-                        )
-                    }
-                    .help("Choose or drop a folder for the selected queue items only.")
-                }
-            }
-        )
-    }
-
-    private var primaryActionSection: AnyView {
-        AnyView(
-            Section("Start") {
-                FocusableContainer(
-                    router: sidebarFocusRouter,
-                    target: .startConversion,
-                    isEnabled: !sidebarStartDisabled,
-                    onKeyDown: buttonKeyHandler {
-                        queueStore.startOrResume(selectedJobIDs: viewModel.selectedJobIDs)
-                    }
-                ) {
-                    Button {
-                        queueStore.startOrResume(selectedJobIDs: viewModel.selectedJobIDs)
-                    } label: {
-                        primarySidebarActionLabel(
-                            queueStore.startButtonTitle(selectedJobIDs: viewModel.selectedJobIDs),
-                            systemImage: queueStore.startButtonTitle(selectedJobIDs: viewModel.selectedJobIDs) == "Resume"
-                                ? "arrow.clockwise"
-                                : "play.fill"
-                        )
-                    }
-                    .disabled(sidebarStartDisabled)
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                Text(startActionSummary)
-                    .font(.caption)
-                    .foregroundStyle(startActionSummaryColor)
-            }
-        )
-    }
-
-    private var moreSettingsSection: AnyView {
-        AnyView(
-            Section {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 8) {
+                    HStack(alignment: .center, spacing: 10) {
                         FocusableContainer(
                             router: sidebarFocusRouter,
-                            target: .moreSettingsTogglePill,
-                            onKeyDown: toggleSectionKeyHandler($isMoreSettingsExpanded)
+                            target: .chooseDefaultOutputFolder,
+                            onKeyDown: buttonKeyHandler {
+                                settingsStore.chooseDefaultOutputDirectory()
+                                queueStore.applyDefaultOutputDirectoryToUnsetJobs()
+                            }
                         ) {
                             Button {
-                                isMoreSettingsExpanded.toggle()
+                                settingsStore.chooseDefaultOutputDirectory()
+                                queueStore.applyDefaultOutputDirectoryToUnsetJobs()
                             } label: {
-                                sectionTogglePill(
-                                    title: isMoreSettingsExpanded ? "Less Settings" : "More Settings",
-                                    isExpanded: isMoreSettingsExpanded
+                                outputActionCardContent(
+                                    title: "Choose default folder",
+                                    subtitle: "Click or drop a folder for new exports.",
+                                    systemImage: "folder"
                                 )
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .buttonStyle(.plain)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                        if let moreSettingsStatusLabel {
-                            statusPill(title: moreSettingsStatusLabel, color: .orange)
+                        HStack(spacing: 6) {
+                            FocusableContainer(
+                                router: sidebarFocusRouter,
+                                target: .resetDefaultOutputFolder,
+                                isEnabled: settingsStore.defaultOutputDirectoryURL != nil,
+                                onKeyDown: buttonKeyHandler {
+                                    settingsStore.resetDefaultOutputDirectory()
+                                }
+                            ) {
+                                SidebarPillButton(
+                                    systemImage: "arrow.uturn.left",
+                                    accessibilityLabel: "Use source folder",
+                                    compact: true,
+                                    action: {
+                                        settingsStore.resetDefaultOutputDirectory()
+                                    }
+                                )
+                                .disabled(settingsStore.defaultOutputDirectoryURL == nil)
+                                .help("Use source folder (save next to input)")
+                            }
+
+                            FocusableContainer(
+                                router: sidebarFocusRouter,
+                                target: .revealDefaultOutputFolder,
+                                isEnabled: settingsStore.defaultOutputDirectoryURL != nil,
+                                onKeyDown: buttonKeyHandler {
+                                    revealDefaultOutputFolder()
+                                }
+                            ) {
+                                SidebarPillButton(
+                                    systemImage: "folder",
+                                    accessibilityLabel: "Reveal output folder in Finder",
+                                    compact: true,
+                                    action: {
+                                        revealDefaultOutputFolder()
+                                    }
+                                )
+                                .disabled(settingsStore.defaultOutputDirectoryURL == nil)
+                                .help(
+                                    settingsStore.defaultOutputDirectoryURL == nil
+                                        ? "Choose a default folder first."
+                                        : "Reveal output folder in Finder"
+                                )
+                            }
                         }
-
-                        HelpPopoverButton(topic: .moreSettings)
                     }
+                }
+                .onDrop(
+                    of: folderDropTypeIdentifiers,
+                    isTargeted: $isDefaultOutputFolderDropTargeted,
+                    perform: handleDefaultOutputFolderDrop
+                )
+                .help("Choose or drop a folder for new exports. Leave it empty to save beside each source file.")
 
-                    if !isMoreSettingsExpanded {
-                        Text("Fine-tune format, video, audio, subtitles, cleanup, and advanced tools.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                FocusableContainer(
+                    router: sidebarFocusRouter,
+                    target: .chooseOutputFolderForSelection,
+                    isEnabled: !viewModel.selectedJobIDs.isEmpty,
+                    onKeyDown: buttonKeyHandler {
+                        queueStore.chooseOutputDirectory(for: viewModel.selectedJobIDs)
                     }
+                ) {
+                    Button {
+                        queueStore.chooseOutputDirectory(for: viewModel.selectedJobIDs)
+                    } label: {
+                        outputActionButtonLabel(
+                            title: "Choose folder for selection",
+                            subtitle: viewModel.selectedJobIDs.isEmpty
+                                ? "Select queue items first."
+                                : "Click or drop a folder for the selected item" + (viewModel.selectedJobIDs.count == 1 ? "." : "s."),
+                            systemImage: "folder",
+                            isDropTargeted: isSelectionOutputFolderDropTargeted,
+                            isEnabled: !viewModel.selectedJobIDs.isEmpty
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.selectedJobIDs.isEmpty)
+                    .onDrop(
+                        of: selectionFolderDropTypeIdentifiers,
+                        isTargeted: $isSelectionOutputFolderDropTargeted,
+                        perform: handleSelectionOutputFolderDrop
+                    )
+                }
+                .help("Select one or more items in the queue to set an output folder for them.")
+            }
+        )
+    }
 
-                    if isMoreSettingsExpanded {
-                        VStack(alignment: .leading, spacing: 14) {
-                            formatAndQualitySettings
-                            videoSettings
-                            audioSettings
-                            subtitleSettings
-                            outputBehaviorSettings
-                            renameToolsSection
-                            advancedToolsSection
-                        }
+    private var pinnedSidebarActions: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            FocusableContainer(
+                router: sidebarFocusRouter,
+                target: .startConversion,
+                isEnabled: !sidebarStartDisabled,
+                onKeyDown: buttonKeyHandler {
+                    queueStore.startOrResume(selectedJobIDs: viewModel.selectedJobIDs)
+                }
+            ) {
+                Button {
+                    queueStore.startOrResume(selectedJobIDs: viewModel.selectedJobIDs)
+                } label: {
+                    primarySidebarActionLabel(
+                        queueStore.startButtonTitle(selectedJobIDs: viewModel.selectedJobIDs),
+                        systemImage: queueStore.startButtonTitle(selectedJobIDs: viewModel.selectedJobIDs) == "Resume"
+                            ? "arrow.clockwise"
+                            : "play.fill"
+                    )
+                }
+                .disabled(sidebarStartDisabled)
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            sidebarReadableText(startActionSummary, font: .caption, color: startActionSummaryColor)
+
+            HStack(spacing: 8) {
+                FocusableContainer(
+                    router: sidebarFocusRouter,
+                    target: .moreSettingsTogglePill,
+                    onKeyDown: toggleSectionKeyHandler($isMoreSettingsExpanded)
+                ) {
+                    Button {
+                        isMoreSettingsExpanded.toggle()
+                    } label: {
+                        sectionTogglePill(
+                            title: isMoreSettingsExpanded ? "Less Settings" : "More Settings",
+                            isExpanded: isMoreSettingsExpanded
+                        )
                     }
+                    .buttonStyle(.plain)
+                }
+
+                if let moreSettingsStatusLabel {
+                    statusPill(title: moreSettingsStatusLabel, color: .orange)
+                }
+
+                HelpPopoverButton(topic: .moreSettings)
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
+        .background(.regularMaterial)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(height: 1)
+        }
+    }
+
+    private var moreSettingsContentSection: AnyView {
+        AnyView(
+            Section("More Settings") {
+                VStack(alignment: .leading, spacing: 14) {
+                    formatAndQualitySettings
+                    videoSettings
+                    audioSettings
+                    subtitleSettings
+                    outputBehaviorSettings
+                    renameToolsSection
+                    advancedToolsSection
                 }
             }
         )
@@ -556,9 +620,11 @@ struct PresetOptionsPanelView: View {
 
                     if settingsStore.encoderCapabilities.missingModernVideoEncoders {
                         HStack(spacing: 8) {
-                            Text("AV1/VP9 encoders not available in your FFmpeg build.")
-                                .font(.caption2)
-                                .foregroundStyle(.orange)
+                            sidebarReadableText(
+                                "AV1/VP9 encoders not available in your FFmpeg build.",
+                                font: .caption2,
+                                color: .orange
+                            )
                             FocusableContainer(
                                 router: sidebarFocusRouter,
                                 target: .videoCodecHelp,
@@ -577,9 +643,11 @@ struct PresetOptionsPanelView: View {
                                         Text("brew install ffmpeg")
                                             .font(.system(.caption, design: .monospaced))
                                             .textSelection(.enabled)
-                                        Text("If already installed, reinstall/update FFmpeg and verify encoders:")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                        sidebarReadableText(
+                                            "If already installed, reinstall/update FFmpeg and verify encoders:",
+                                            font: .caption,
+                                            color: .secondary
+                                        )
                                         Text("ffmpeg -encoders | grep -E \"svtav1|aom|vpx-vp9\"")
                                             .font(.system(.caption, design: .monospaced))
                                             .textSelection(.enabled)
@@ -799,10 +867,59 @@ struct PresetOptionsPanelView: View {
                             ) {
                                 BinaryPillToggle(
                                     isOn: optionsBinding(\.enableHDRToSDR),
-                                    isDisabled: viewModel.draftOptions.isAudioOnly
+                                    isDisabled: !toneMappingToggleEnabled
                                 )
                             }
                             HelpPopoverButton(topic: .hdrToSDR)
+                            if !toneMappingControlsAvailable {
+                                Button {
+                                    isToneMapSupportHelpPresented = true
+                                } label: {
+                                    Image(systemName: "questionmark.circle")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(.orange)
+                                        .frame(width: 16, height: 16)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Why HDR tone mapping is unavailable")
+                                .popover(isPresented: $isToneMapSupportHelpPresented, arrowEdge: .trailing) {
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        Text("HDR tone mapping unavailable")
+                                            .font(.headline)
+                                        sidebarReadableText(
+                                            toneMappingUnavailableMessage,
+                                            font: .callout,
+                                            color: .secondary
+                                        )
+                                    }
+                                    .padding(14)
+                                    .frame(width: 320, alignment: .leading)
+                                }
+                            }
+                        }
+                        if viewModel.draftOptions.enableHDRToSDR {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Tone mapping engine")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                FocusableContainer(
+                                    router: sidebarFocusRouter,
+                                    target: .hdrToneMappingEngine,
+                                    onKeyDown: toneMappingEngineKeyHandler
+                                ) {
+                                    WrappingPills(
+                                        options: ToneMappingBackend.allCases,
+                                        selection: toneMappingEngineBinding,
+                                        title: { $0.displayName },
+                                        isDisabled: isToneMappingEngineDisabled,
+                                        helpText: toneMappingEngineHelpText
+                                    )
+                                }
+
+                                if let toneMappingEngineWarning {
+                                    sidebarReadableText(toneMappingEngineWarning, font: .caption2, color: .orange)
+                                }
+                            }
                         }
                         HStack(spacing: 6) {
                             Text("Tone map method")
@@ -821,8 +938,25 @@ struct PresetOptionsPanelView: View {
                                 }
                             }
                             .pickerStyle(.menu)
-                            .disabled(!viewModel.draftOptions.enableHDRToSDR || viewModel.draftOptions.isAudioOnly)
+                            .disabled(
+                                !viewModel.draftOptions.enableHDRToSDR ||
+                                viewModel.draftOptions.isAudioOnly ||
+                                !toneMappingControlsAvailable ||
+                                toneMappingUsesApplePipeline
+                            )
                             .help("Choose how HDR highlights are compressed into SDR.")
+                        }
+
+                        if let toneMappingNote {
+                            sidebarReadableText(toneMappingNote, font: .caption2, color: .secondary)
+                        }
+
+                        if !toneMappingControlsAvailable {
+                            sidebarReadableText(
+                                toneMappingUnavailableMessage,
+                                font: .caption2,
+                                color: .orange
+                            )
                         }
                     }
                 } label: {
@@ -925,9 +1059,11 @@ struct PresetOptionsPanelView: View {
 
                 if viewModel.draftOptions.audioCodec == .mp3,
                    audioChannelBinding.wrappedValue == .surround71 {
-                    Text("MP3 does not reliably support 7.1. Output will be encoded as Stereo.")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
+                    sidebarReadableText(
+                        "MP3 does not reliably support 7.1. Output will be encoded as Stereo.",
+                        font: .caption2,
+                        color: .orange
+                    )
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -947,15 +1083,13 @@ struct PresetOptionsPanelView: View {
                                 chooseExternalAudioTracks()
                             }
                         ) {
-                            Button {
-                                chooseExternalAudioTracks()
-                            } label: {
-                                pillActionButtonLabel(
-                                    viewModel.draftOptions.externalAudioAttachments.isEmpty ? "Add Audio Tracks" : "Add More Audio",
-                                    systemImage: "waveform.badge.plus"
-                                )
-                            }
-                            .buttonStyle(.plain)
+                            SidebarPillButton(
+                                title: viewModel.draftOptions.externalAudioAttachments.isEmpty ? "Add Audio Tracks" : "Add More Audio",
+                                systemImage: "waveform.badge.plus",
+                                action: {
+                                    chooseExternalAudioTracks()
+                                }
+                            )
                         }
 
                         if !viewModel.draftOptions.externalAudioAttachments.isEmpty {
@@ -976,9 +1110,11 @@ struct PresetOptionsPanelView: View {
                         }
                     }
 
-                    Text("These tracks replace the source audio. Their order here becomes the output order.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    sidebarReadableText(
+                        "These tracks replace the source audio. Their order here becomes the output order.",
+                        font: .caption2,
+                        color: .secondary
+                    )
 
                     if !viewModel.draftOptions.externalAudioAttachments.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
@@ -995,9 +1131,7 @@ struct PresetOptionsPanelView: View {
                     }
 
                     if let error = externalAudioValidationMessage {
-                        Text(error)
-                            .font(.caption2)
-                            .foregroundStyle(.red)
+                        sidebarReadableText(error, font: .caption2, color: .red)
                     }
                 }
                 .help("Add one or more external audio tracks. ForgeFF uses them in this order and replaces the source audio.")
@@ -1076,15 +1210,11 @@ struct PresetOptionsPanelView: View {
                     }
 
                     if let warning = subtitleCompatibilityMessage {
-                        Text(warning)
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
+                        sidebarReadableText(warning, font: .caption2, color: .orange)
                     }
 
                     if let error = subtitleValidationMessage {
-                        Text(error)
-                            .font(.caption2)
-                            .foregroundStyle(.red)
+                        sidebarReadableText(error, font: .caption2, color: .red)
                     }
                 }
             }
@@ -1267,12 +1397,13 @@ struct PresetOptionsPanelView: View {
                             viewModel.applyRenamePreview()
                         }
                     ) {
-                        Button {
-                            viewModel.applyRenamePreview()
-                        } label: {
-                            pillActionButtonLabel("Apply Rename", systemImage: "textformat.abc", prominence: .primary)
-                        }
-                        .buttonStyle(.plain)
+                        SidebarPillButton(
+                            title: "Apply Rename",
+                            systemImage: "textformat.abc",
+                            action: {
+                                viewModel.applyRenamePreview()
+                            }
+                        )
                     }
                 }
             }
@@ -1389,17 +1520,19 @@ struct PresetOptionsPanelView: View {
                             .opacity(viewModel.draftOptions.isCustomCommandEnabled ? 1 : 0.7)
                     }
                     .help("Use {input} and {output} placeholders. ForgeFF substitutes the real file paths safely.")
-                    Text(
+                    sidebarReadableText(
                         viewModel.draftOptions.isCustomCommandEnabled
                             ? "Required placeholders: {input} and {output}."
-                            : "Stored text stays here, but it is inactive until you turn this override on."
+                            : "Stored text stays here, but it is inactive until you turn this override on.",
+                        font: .caption2,
+                        color: .secondary
                     )
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    Text("Example: ffmpeg -hide_banner -i \"{input}\" -c:v libx264 -preset medium -crf 21 \"{output}\"")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
+                    sidebarReadableText(
+                        "Example: ffmpeg -hide_banner -i \"{input}\" -c:v libx264 -preset medium -crf 21 \"{output}\"",
+                        font: .caption2,
+                        color: .secondary
+                    )
+                    .textSelection(.enabled)
 
                     HStack(spacing: 10) {
                         FocusableContainer(
@@ -1426,9 +1559,7 @@ struct PresetOptionsPanelView: View {
                     }
 
                     if let error = customCommandValidation.errorMessage {
-                        Text(error)
-                            .font(.caption2)
-                            .foregroundStyle(.red)
+                        sidebarReadableText(error, font: .caption2, color: .red)
                     }
                 }
             }
@@ -1501,7 +1632,13 @@ struct PresetOptionsPanelView: View {
     }
 
     private var primaryPresetCards: [SidebarPrimaryPresetCard] {
-        var cards = [
+        let cards = [
+            SidebarPrimaryPresetCard(
+                title: "Telegram",
+                subtitle: "Reliable MP4 playback, source resolution and FPS.",
+                presetName: ConversionPreset.telegramPresetName,
+                icon: "paperplane.fill"
+            ),
             SidebarPrimaryPresetCard(
                 title: "Fast MP4 (H.264)",
                 subtitle: "Fast, widely compatible export.",
@@ -1510,9 +1647,21 @@ struct PresetOptionsPanelView: View {
             ),
             SidebarPrimaryPresetCard(
                 title: "Efficient HEVC",
-                subtitle: "Smaller files for newer Apple devices.",
-                presetName: "MP4 — HEVC (Balanced)",
+                subtitle: "Telegram-style settings with smaller HEVC video.",
+                presetName: ConversionPreset.efficientHEVCPresetName,
                 icon: "sparkles"
+            ),
+            SidebarPrimaryPresetCard(
+                title: "VP9",
+                subtitle: "Efficient web and archive compression in MKV.",
+                presetName: "MKV — VP9 (Balanced)",
+                icon: "shippingbox.fill"
+            ),
+            SidebarPrimaryPresetCard(
+                title: "AV1",
+                subtitle: "Modern compression with the smallest output.",
+                presetName: "MKV — AV1 (Balanced)",
+                icon: "archivebox.fill"
             ),
             SidebarPrimaryPresetCard(
                 title: "Editing ProRes",
@@ -1522,33 +1671,25 @@ struct PresetOptionsPanelView: View {
             )
         ]
 
-        if settingsStore.encoderCapabilities.supportsAV1 {
-            cards.append(
-                SidebarPrimaryPresetCard(
-                    title: "Smallest File / Web Share",
-                    subtitle: "Best compression for uploads and sharing.",
-                    presetName: "MKV — AV1 (Balanced)",
-                    icon: "paperplane.fill"
-                )
-            )
-        } else if settingsStore.encoderCapabilities.supportsVP9 {
-            cards.append(
-                SidebarPrimaryPresetCard(
-                    title: "Smallest File / Web Share",
-                    subtitle: "Smaller shareable files when AV1 is unavailable.",
-                    presetName: "MKV — VP9 (Balanced)",
-                    icon: "paperplane.fill"
-                )
-            )
-        }
-
         return cards
     }
 
     private var shouldShowCurrentPresetStatus: Bool {
         viewModel.isUsingCustomPreset ||
         viewModel.isPresetCustomized ||
-        !primaryPresetCards.map(\.presetName).contains(viewModel.draftOptions.presetName)
+        !primaryPresetCards.map(\.presetName).contains(viewModel.selectedPresetID)
+    }
+
+    private func isPrimaryPresetUnavailable(_ card: SidebarPrimaryPresetCard) -> Bool {
+        guard let codec = ConversionPreset.builtIn(named: card.presetName)?.videoCodec else {
+            return false
+        }
+        return isVideoCodecUnavailable(codec)
+    }
+
+    private func primaryPresetHelpText(_ card: SidebarPrimaryPresetCard) -> String {
+        guard isPrimaryPresetUnavailable(card) else { return card.subtitle }
+        return "\(card.title) is not available in the detected FFmpeg build."
     }
 
     private var currentPresetStatusCard: some View {
@@ -1570,13 +1711,11 @@ struct PresetOptionsPanelView: View {
     }
 
     private var currentPresetStatusSubtitle: String {
+        if let modifiedBasePreset = viewModel.modifiedBasePreset {
+            return "Based on \(modifiedBasePreset.name) with manual overrides in More Settings."
+        }
         if viewModel.isUsingCustomPreset {
             return "Manual settings outside the quick preset cards. Save them if you want to reuse this setup."
-        }
-        if viewModel.isPresetCustomized {
-            return isActiveUserPreset
-                ? "Saved preset with manual overrides in More Settings."
-                : "Selected preset with manual overrides in More Settings."
         }
         if isActiveUserPreset {
             return "Saved preset from your library."
@@ -1587,9 +1726,6 @@ struct PresetOptionsPanelView: View {
     private var currentPresetStatusBadge: String? {
         if viewModel.isUsingCustomPreset {
             return "Custom"
-        }
-        if viewModel.isPresetCustomized {
-            return "Modified"
         }
         return "Selected"
     }
@@ -1605,9 +1741,6 @@ struct PresetOptionsPanelView: View {
     }
 
     private var currentPresetStatusAccentColor: Color {
-        if viewModel.isPresetCustomized {
-            return .orange
-        }
         return .accentColor
     }
 
@@ -1705,9 +1838,22 @@ struct PresetOptionsPanelView: View {
     }
 
     private func presetCard(for card: SidebarPrimaryPresetCard) -> some View {
-        let isSelected = viewModel.activePreset.name == card.presetName
-        let accentColor: Color = isSelected && viewModel.isPresetCustomized ? .orange : .accentColor
-        let badgeTitle = isSelected ? (viewModel.isPresetCustomized ? "Modified" : "Selected") : nil
+        let isSelected = viewModel.selectedPresetID == card.presetName
+        let isModifiedBasePreset = viewModel.modifiedBasePreset?.name == card.presetName && !isSelected
+        let isUnavailable = isPrimaryPresetUnavailable(card)
+        let accentColor: Color = isUnavailable ? .secondary : (isModifiedBasePreset ? .orange : .accentColor)
+        let badgeTitle: String? = {
+            if isUnavailable {
+                return "Unavailable"
+            }
+            if isSelected {
+                return "Selected"
+            }
+            if isModifiedBasePreset {
+                return "Modified"
+            }
+            return nil
+        }()
 
         return presetCard(
             title: card.title,
@@ -1731,14 +1877,14 @@ struct PresetOptionsPanelView: View {
         let borderColor = isSelected ? accentColor : Color(nsColor: .separatorColor)
         let fillColor = isSelected ? accentColor.opacity(0.18) : Color(nsColor: .controlBackgroundColor)
 
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .semibold))
-                .frame(width: 28, height: 28)
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 24, height: 24)
                 .background((isSelected ? borderColor : Color(nsColor: .separatorColor)).opacity(0.15))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(title)
                         .font(.headline)
@@ -1752,22 +1898,27 @@ struct PresetOptionsPanelView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.leading)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(14)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(fillColor)
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
                 .stroke(borderColor, lineWidth: isSelected ? 1.5 : 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
     }
 
     private func presetIcon(for preset: ConversionPreset) -> String {
         guard preset.kind == .video else {
             return "waveform"
+        }
+
+        if preset.name == ConversionPreset.telegramPresetName {
+            return "paperplane.fill"
         }
 
         switch preset.videoCodec {
@@ -1788,22 +1939,21 @@ struct PresetOptionsPanelView: View {
         Group {
             if let outputFolder = settingsStore.defaultOutputDirectoryURL {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Default folder")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
                     Text(outputFolder.lastPathComponent)
                         .font(.callout.weight(.semibold))
-                        .lineLimit(1)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     Text(outputFolder.path)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else {
-                Text("Exports save next to each source file.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                sidebarReadableText("Exports save next to each source file.", font: .caption, color: .secondary)
             }
         }
     }
@@ -1812,22 +1962,36 @@ struct PresetOptionsPanelView: View {
         [UTType.fileURL.identifier]
     }
 
+    private var selectionFolderDropTypeIdentifiers: [String] {
+        viewModel.selectedJobIDs.isEmpty ? [] : folderDropTypeIdentifiers
+    }
+
     private func outputActionButtonLabel(
         title: String,
         subtitle: String,
         systemImage: String,
-        isDropTargeted: Bool
+        isDropTargeted: Bool,
+        isEnabled: Bool = true
     ) -> some View {
-        let borderColor = isDropTargeted ? Color.accentColor : Color(nsColor: .separatorColor)
-        let backgroundColor = isDropTargeted
-            ? Color.accentColor.opacity(0.12)
-            : Color(nsColor: .controlBackgroundColor)
+        outputActionCardContainer(isDropTargeted: isDropTargeted, isEnabled: isEnabled) {
+            outputActionCardContent(
+                title: title,
+                subtitle: subtitle,
+                systemImage: systemImage
+            )
+        }
+    }
 
-        return HStack(alignment: .center, spacing: 12) {
+    private func outputActionCardContent(
+        title: String,
+        subtitle: String,
+        systemImage: String
+    ) -> some View {
+        HStack(alignment: .center, spacing: 12) {
             Image(systemName: systemImage)
                 .font(.system(size: 15, weight: .semibold))
                 .frame(width: 28, height: 28)
-                .background(borderColor.opacity(0.14))
+                .background(Color(nsColor: .separatorColor).opacity(0.14))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
@@ -1838,15 +2002,28 @@ struct PresetOptionsPanelView: View {
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(nil)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-
-            Spacer(minLength: 10)
-
-            Image(systemName: "arrow.down.circle")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(isDropTargeted ? Color.accentColor : .secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func outputActionCardContainer<Content: View>(
+        isDropTargeted: Bool,
+        isEnabled: Bool = true,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let borderColor = isDropTargeted
+            ? Color.accentColor
+            : (isEnabled ? Color(nsColor: .separatorColor) : Color(nsColor: .separatorColor).opacity(0.6))
+        let backgroundColor = isDropTargeted
+            ? Color.accentColor.opacity(0.12)
+            : Color(nsColor: .controlBackgroundColor)
+
+        return content()
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(backgroundColor)
@@ -1856,6 +2033,22 @@ struct PresetOptionsPanelView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .opacity(isEnabled ? 1 : 0.58)
+    }
+
+    private func sidebarReadableText(
+        _ content: String,
+        font: Font = .caption2,
+        color: Color = .secondary
+    ) -> some View {
+        // Sidebar helper and warning copy should wrap within the available column instead of truncating.
+        Text(content)
+            .font(font)
+            .foregroundStyle(color)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+            .multilineTextAlignment(.leading)
     }
 
     private func pillActionButtonLabel(
@@ -2092,6 +2285,113 @@ struct PresetOptionsPanelView: View {
         viewModel.activePreset.name
     }
 
+    private var toneMappingUsesApplePipeline: Bool {
+        settingsStore.preferredToneMappingBackend == .appleAVConvert
+    }
+
+    private var selectedDynamicRangeState: SidebarDynamicRangeState {
+        let relevantJobs = viewModel.selectedJobs.filter { !$0.options.isAudioOnly }
+        guard !relevantJobs.isEmpty else { return .unknown }
+        let analyzedJobs = relevantJobs.filter { $0.metadata?.videoStream != nil }
+        guard !analyzedJobs.isEmpty else { return .unknown }
+        let hdrCount = analyzedJobs.filter { $0.metadata?.isHDR == true }.count
+        if hdrCount == 0 {
+            return .allSDR
+        }
+        if hdrCount == analyzedJobs.count {
+            return .hdrPresent
+        }
+        return .mixed
+    }
+
+    private var toneMappingControlsAvailable: Bool {
+        if settingsStore.avconvertCapabilities.isAvailable {
+            return true
+        }
+        return !settingsStore.filterCapabilities.hasScanned || settingsStore.filterCapabilities.supportsToneMapping
+    }
+
+    private var toneMappingToggleEnabled: Bool {
+        !viewModel.draftOptions.isAudioOnly &&
+        ((toneMappingControlsAvailable && selectedDynamicRangeState != .allSDR) || viewModel.draftOptions.enableHDRToSDR)
+    }
+
+    private var toneMappingUnavailableMessage: String {
+        "HDR tone mapping requires Apple's avconvert on this Mac, or an FFmpeg build with libplacebo or zscale."
+    }
+
+    private var toneMappingEngineBinding: Binding<ToneMappingBackend> {
+        Binding(
+            get: { settingsStore.toneMappingBackendPreference },
+            set: { newValue in
+                settingsStore.selectToneMappingBackend(newValue)
+            }
+        )
+    }
+
+    private var toneMappingEngineWarning: String? {
+        guard viewModel.draftOptions.enableHDRToSDR else { return nil }
+        guard settingsStore.filterCapabilities.hasScanned else { return nil }
+        guard !settingsStore.filterCapabilities.supportsToneMapping else { return nil }
+        guard settingsStore.avconvertCapabilities.isAvailable else { return nil }
+        return "FFmpeg tone mapping requires libplacebo or zscale in your ffmpeg build. Apple VideoToolbox will be used instead."
+    }
+
+    private func isToneMappingEngineDisabled(_ backend: ToneMappingBackend) -> Bool {
+        switch backend {
+        case .appleAVConvert:
+            return !settingsStore.avconvertCapabilities.isAvailable
+        case .ffmpegFilters:
+            return settingsStore.filterCapabilities.hasScanned && !settingsStore.filterCapabilities.supportsToneMapping
+        }
+    }
+
+    private func toneMappingEngineHelpText(_ backend: ToneMappingBackend) -> String? {
+        switch backend {
+        case .appleAVConvert:
+            return settingsStore.avconvertCapabilities.isAvailable
+                ? nil
+                : "Apple VideoToolbox tone mapping is unavailable on this Mac."
+        case .ffmpegFilters:
+            guard settingsStore.filterCapabilities.hasScanned else { return nil }
+            return settingsStore.filterCapabilities.supportsToneMapping
+                ? nil
+                : "FFmpeg tone mapping requires libplacebo or zscale in your ffmpeg build."
+        }
+    }
+
+    private var toneMappingNote: String? {
+        if selectedDynamicRangeState == .allSDR {
+            return "Source is SDR. HDR → SDR only applies to HDR sources."
+        }
+
+        guard viewModel.draftOptions.enableHDRToSDR else { return nil }
+
+        if toneMappingUsesApplePipeline {
+            return "Handled by Apple VideoToolbox tone mapping."
+        }
+
+        if settingsStore.preferredToneMappingBackend == .ffmpegFilters {
+            if !settingsStore.avconvertCapabilities.isAvailable,
+               settingsStore.filterCapabilities.hasScanned,
+               settingsStore.filterCapabilities.supportsToneMapping {
+                return "Apple VideoToolbox is unavailable on this Mac, so ForgeFF will use FFmpeg tone mapping instead."
+            }
+
+            if selectedDynamicRangeState == .mixed {
+                return "SDR sources keep their original range. Only HDR sources will be tone mapped."
+            }
+
+            return "FFmpeg tone mapping uses the selected method below."
+        }
+
+        if selectedDynamicRangeState == .mixed {
+            return "SDR sources keep their original range. Only HDR sources will be tone mapped."
+        }
+
+        return nil
+    }
+
     private var sidebarStartDisabled: Bool {
         !settingsStore.hasRequiredBinaries ||
         !queueStore.canStartOrResume(selectedJobIDs: viewModel.selectedJobIDs) ||
@@ -2179,6 +2479,13 @@ struct PresetOptionsPanelView: View {
         (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
     }
 
+    private func revealDefaultOutputFolder() {
+        guard settingsStore.revealDefaultOutputDirectory() else {
+            queueStore.alertMessage = "Choose a default output folder first."
+            return
+        }
+    }
+
     private var advancedExpandedBinding: Binding<Bool> {
         Binding(
             get: { viewModel.isAdvancedExpanded },
@@ -2206,6 +2513,7 @@ struct PresetOptionsPanelView: View {
             .morePresets,
             .chooseDefaultOutputFolder,
             .resetDefaultOutputFolder,
+            .revealDefaultOutputFolder,
             .chooseOutputFolderForSelection,
             .startConversion,
             .moreSettingsTogglePill
@@ -2223,6 +2531,7 @@ struct PresetOptionsPanelView: View {
                 .resolution,
                 .fps,
                 .hdrEnable,
+                .hdrToneMappingEngine,
                 .hdrToneMap,
                 .audioCodec,
                 .audioBitrate,
@@ -2336,6 +2645,8 @@ struct PresetOptionsPanelView: View {
             return true
         case .resetDefaultOutputFolder:
             return settingsStore.defaultOutputDirectoryURL != nil
+        case .revealDefaultOutputFolder:
+            return settingsStore.defaultOutputDirectoryURL != nil
         case .chooseOutputFolderForSelection:
             return !viewModel.selectedJobIDs.isEmpty
         case .startConversion:
@@ -2353,11 +2664,16 @@ struct PresetOptionsPanelView: View {
              .cleanupMetadata,
              .cleanupChapters,
              .externalAudioAdd,
-             .hdrEnable,
              .advancedTogglePill,
              .renameTogglePill,
              .allowOverwrite:
             return isMoreSettingsExpanded
+        case .hdrEnable:
+            return isMoreSettingsExpanded && toneMappingToggleEnabled
+        case .hdrToneMappingEngine:
+            return isMoreSettingsExpanded &&
+            viewModel.draftOptions.enableHDRToSDR &&
+            toneMappingControlsAvailable
         case .subtitleAdd:
             return isMoreSettingsExpanded && subtitleMode == .addExternal
         case .subtitleClear:
@@ -2379,7 +2695,10 @@ struct PresetOptionsPanelView: View {
         case .audioBitrate, .audioChannels:
             return isMoreSettingsExpanded && viewModel.draftOptions.audioCodec != .copy
         case .hdrToneMap:
-            return isMoreSettingsExpanded && viewModel.draftOptions.enableHDRToSDR
+            return isMoreSettingsExpanded &&
+            viewModel.draftOptions.enableHDRToSDR &&
+            toneMappingControlsAvailable &&
+            !toneMappingUsesApplePipeline
         case .resolutionCustomWidth, .resolutionCustomHeight:
             return isMoreSettingsExpanded && resolutionChoiceBinding.wrappedValue == .custom
         case .fpsCustomValue:
@@ -2431,6 +2750,7 @@ struct PresetOptionsPanelView: View {
              .externalAudioAdd,
              .externalAudioClear,
              .hdrEnable,
+             .hdrToneMappingEngine,
              .hdrToneMap,
              .subtitleAdd,
              .subtitleClear,
@@ -2609,6 +2929,7 @@ struct PresetOptionsPanelView: View {
                 }
                 return true
             case 36, 76, 49:
+                guard !isPrimaryPresetUnavailable(card) else { return true }
                 viewModel.selectPreset(named: card.presetName)
                 return true
             default:
@@ -2640,7 +2961,9 @@ struct PresetOptionsPanelView: View {
     }
 
     private func toneMapKeyHandler(_ event: NSEvent) -> Bool {
-        guard viewModel.draftOptions.enableHDRToSDR else { return false }
+        guard toneMappingControlsAvailable,
+              viewModel.draftOptions.enableHDRToSDR,
+              !toneMappingUsesApplePipeline else { return false }
         let modes = ToneMapMode.allCases
         guard let index = modes.firstIndex(of: viewModel.draftOptions.toneMapMode) else { return false }
         switch event.keyCode {
@@ -2649,6 +2972,22 @@ struct PresetOptionsPanelView: View {
             return true
         case 124, 125:
             viewModel.updateOptions { $0.toneMapMode = modes[min(modes.count - 1, index + 1)] }
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func toneMappingEngineKeyHandler(_ event: NSEvent) -> Bool {
+        guard viewModel.draftOptions.enableHDRToSDR, toneMappingControlsAvailable else { return false }
+        let backends = ToneMappingBackend.allCases.filter { !isToneMappingEngineDisabled($0) }
+        guard let index = backends.firstIndex(of: toneMappingEngineBinding.wrappedValue) else { return false }
+        switch event.keyCode {
+        case 123, 126:
+            toneMappingEngineBinding.wrappedValue = backends[max(0, index - 1)]
+            return true
+        case 124, 125:
+            toneMappingEngineBinding.wrappedValue = backends[min(backends.count - 1, index + 1)]
             return true
         default:
             return false
@@ -3110,7 +3449,14 @@ private struct SidebarPrimaryPresetCard: Identifiable {
     var id: String { presetName }
 }
 
-private enum PillButtonProminence {
+private enum SidebarDynamicRangeState {
+    case unknown
+    case allSDR
+    case mixed
+    case hdrPresent
+}
+
+private enum PillButtonProminence: Equatable {
     case primary
     case secondary
     case subtle
@@ -3124,6 +3470,92 @@ private enum PillButtonProminence {
         case .subtle:
             return (.secondary, Color.secondary.opacity(0.12), Color.secondary.opacity(0.24))
         }
+    }
+}
+
+private struct SidebarPillButton: View {
+    var title: String? = nil
+    var systemImage: String? = nil
+    var accessibilityLabel: String? = nil
+    var prominence: PillButtonProminence = .secondary
+    var compact: Bool = false
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                if let title {
+                    Text(title)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .buttonStyle(
+            SidebarPillButtonStyle(
+                prominence: prominence,
+                compact: compact,
+                isHovering: isHovering
+            )
+        )
+        .onHover { hovering in
+            isHovering = hovering
+        }
+        .accessibilityLabel(Text(accessibilityLabel ?? title ?? "Button"))
+    }
+}
+
+private struct SidebarPillButtonStyle: ButtonStyle {
+    let prominence: PillButtonProminence
+    let compact: Bool
+    let isHovering: Bool
+
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let palette = prominence.palette
+        let interactionOverlayOpacity = isEnabled
+            ? (configuration.isPressed ? 0.12 : (isHovering ? 0.06 : 0))
+            : 0
+        let borderColor = configuration.isPressed
+            ? Color.accentColor.opacity(0.85)
+            : palette.border
+        let foregroundColor: Color = {
+            if !isEnabled {
+                return Color(nsColor: .secondaryLabelColor)
+            }
+            if prominence == .primary {
+                return .white
+            }
+            return Color(nsColor: .labelColor)
+        }()
+
+        return configuration.label
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, compact ? 8 : 12)
+            .frame(minWidth: compact ? 30 : nil)
+            .frame(height: 30)
+            .foregroundStyle(foregroundColor)
+            .background {
+                Capsule()
+                    .fill(palette.background)
+                    .overlay(
+                        Capsule()
+                            .fill(Color(nsColor: .labelColor).opacity(interactionOverlayOpacity))
+                    )
+            }
+            .overlay(
+                Capsule()
+                    .stroke(borderColor, lineWidth: 1)
+            )
+            .clipShape(Capsule())
+            .opacity(isEnabled ? 1 : 0.58)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
     }
 }
 

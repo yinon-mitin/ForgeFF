@@ -9,6 +9,7 @@ struct QueueListView: View {
 
     @ObservedObject var viewModel: QueueViewModel
     @Binding var isDropTargeted: Bool
+    @Binding var inspectedFailureJobID: UUID?
     let onAddFiles: () -> Void
     let onAddFolder: () -> Void
 
@@ -16,7 +17,6 @@ struct QueueListView: View {
     @State private var selectedFilter: QueueFilter = .all
     @State private var expandedFailureGroupKeys = Set<String>()
     @StateObject private var thumbnailStore = QueueThumbnailStore()
-    @StateObject private var rowPresentationState = QueueRowPresentationState()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,53 +32,7 @@ struct QueueListView: View {
 
                     List(selection: selectionBinding) {
                         ForEach(filteredJobs) { job in
-                            QueueRowView(
-                                job: job,
-                                displayStatus: queueStore.displayStatus(for: job),
-                                previewURL: job.previewURL,
-                                thumbnail: thumbnailStore.image(for: job.previewURL),
-                                isSelected: viewModel.selectedJobIDs.contains(job.id),
-                                isDetailsExpanded: Binding(
-                                    get: { rowPresentationState.isDetailsExpanded(for: job.id) },
-                                    set: { rowPresentationState.setDetailsExpanded($0, for: job.id) }
-                                ),
-                                onReveal: { queueStore.revealOutput(for: job.id) },
-                                onOpenOutput: {
-                                    selectJob(job.id)
-                                    queueStore.openCompletedOutput(for: job.id)
-                                },
-                                onRetry: {
-                                    queueStore.retry(jobID: job.id)
-                                    viewModel.refreshDraftOptions()
-                                },
-                                onRemove: {
-                                    let idsToRemove: Set<UUID>
-                                    if !viewModel.selectedJobIDs.isEmpty, viewModel.selectedJobIDs.contains(job.id) {
-                                        idsToRemove = viewModel.selectedJobIDs
-                                    } else {
-                                        idsToRemove = [job.id]
-                                        viewModel.selectedJobIDs = [job.id]
-                                    }
-                                    queueStore.remove(jobIDs: idsToRemove)
-                                    viewModel.selectedJobIDs.subtract(idsToRemove)
-                                    viewModel.refreshDraftOptions()
-                                },
-                                onCancel: { queueStore.cancel(jobID: job.id) },
-                                onOpenSource: { queueStore.openSource(for: job.id) },
-                                onOpenOutputFolder: { queueStore.openOutputFolder(for: job.id) }
-                            )
-                            .id(job.id)
-                            .tag(job.id)
-                            .onAppear {
-                                thumbnailStore.loadThumbnail(for: job.previewURL)
-                            }
-                            .onChange(of: job.previewURL) { previewURL in
-                                thumbnailStore.loadThumbnail(for: previewURL, forceReload: true)
-                            }
-                            .onChange(of: job.completedAt) { _ in
-                                guard job.status == .completed else { return }
-                                thumbnailStore.loadThumbnail(for: job.previewURL, forceReload: true)
-                            }
+                            queueRow(for: job)
                         }
                         .onMove(perform: queueStore.move)
                     }
@@ -90,7 +44,7 @@ struct QueueListView: View {
         .background(isDropTargeted ? Color.accentColor.opacity(0.08) : Color.clear)
         .onChange(of: viewModel.selectedJobIDs) { ids in
             queueStore.selectedJobID = ids.first
-            viewModel.refreshDraftOptions()
+            viewModel.scheduleSelectionRefresh()
         }
         .onChange(of: queueStore.jobs.map(\.id)) { ids in
             let idSet = Set(ids)
@@ -98,7 +52,9 @@ struct QueueListView: View {
             if intersection != viewModel.selectedJobIDs {
                 viewModel.selectedJobIDs = intersection
             }
-            rowPresentationState.reconcile(validJobIDs: idSet)
+            if let inspectedFailureJobID, !idSet.contains(inspectedFailureJobID) {
+                self.inspectedFailureJobID = nil
+            }
         }
     }
 
@@ -112,6 +68,57 @@ struct QueueListView: View {
     private func selectJob(_ jobID: UUID) {
         viewModel.selectedJobIDs = [jobID]
         queueStore.selectedJobID = jobID
+    }
+
+    private func queueRow(for job: VideoJob) -> some View {
+        QueueRowView(
+            job: job,
+            displayStatus: queueStore.displayStatus(for: job),
+            previewURL: job.previewURL,
+            thumbnail: thumbnailStore.image(for: job.previewURL),
+            isSelected: viewModel.selectedJobIDs.contains(job.id),
+            onReveal: { queueStore.revealOutput(for: job.id) },
+            onOpenOutput: {
+                selectJob(job.id)
+                queueStore.openCompletedOutput(for: job.id)
+            },
+            onRetry: {
+                queueStore.retry(jobID: job.id)
+                viewModel.refreshDraftOptions()
+            },
+            onShowDetails: {
+                selectJob(job.id)
+                inspectedFailureJobID = job.id
+            },
+            onRemove: { remove(job) },
+            onCancel: { queueStore.cancel(jobID: job.id) }
+        )
+        .id(job.id)
+        .tag(job.id)
+        .onAppear {
+            thumbnailStore.loadThumbnail(for: job.previewURL)
+        }
+        .onChange(of: job.previewURL) { previewURL in
+            thumbnailStore.loadThumbnail(for: previewURL, forceReload: true)
+        }
+        .onChange(of: job.completedAt) { _ in
+            guard job.status == .completed else { return }
+            thumbnailStore.loadThumbnail(for: job.previewURL, forceReload: true)
+        }
+    }
+
+    private func remove(_ job: VideoJob) {
+        let selectedIDs = viewModel.selectedJobIDs
+        let idsToRemove: Set<UUID>
+        if selectedIDs.contains(job.id) {
+            idsToRemove = selectedIDs
+        } else {
+            idsToRemove = [job.id]
+            viewModel.selectedJobIDs = [job.id]
+        }
+        queueStore.remove(jobIDs: idsToRemove)
+        viewModel.selectedJobIDs = viewModel.selectedJobIDs.subtracting(idsToRemove)
+        viewModel.refreshDraftOptions()
     }
 
     private var filteredJobs: [VideoJob] {
@@ -135,35 +142,69 @@ struct QueueListView: View {
     }
 
     private var filterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(QueueFilter.allCases) { filter in
-                    Button {
-                        selectedFilter = filter
-                    } label: {
-                        Text(filter.title)
-                            .font(.callout.weight(.medium))
-                            .padding(.horizontal, 10)
-                            .frame(height: 28)
-                            .background(selectedFilter == filter ? Color.accentColor.opacity(0.18) : Color(nsColor: .controlBackgroundColor))
-                            .overlay(
-                                Capsule()
-                                    .stroke(selectedFilter == filter ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: 1)
-                            )
-                            .clipShape(Capsule())
+        HStack(spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(QueueFilter.allCases) { filter in
+                        Button {
+                            selectedFilter = filter
+                        } label: {
+                            Text(filter.title)
+                                .font(.callout.weight(.medium))
+                                .padding(.horizontal, 10)
+                                .frame(height: 28)
+                                .background(selectedFilter == filter ? Color.accentColor.opacity(0.18) : Color(nsColor: .controlBackgroundColor))
+                                .overlay(
+                                    Capsule()
+                                        .stroke(selectedFilter == filter ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: 1)
+                                )
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+
+            Spacer(minLength: 12)
+
+            Text(activitySummaryText)
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .help("Current queue activity and live FFmpeg processing speed.")
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(Color(nsColor: .windowBackgroundColor))
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(Color(nsColor: .separatorColor))
                 .frame(height: 1)
         }
+    }
+
+    private var activitySummaryText: String {
+        let summary = queueStore.footerSummary
+        var parts: [String] = []
+        if summary.processing > 0 {
+            parts.append("\(summary.processing) running")
+        }
+        if summary.queued > 0 {
+            parts.append("\(summary.queued) queued")
+        }
+        if summary.done > 0 {
+            parts.append("\(summary.done) done")
+        }
+        if summary.failed > 0 {
+            parts.append("\(summary.failed) failed")
+        }
+        if let framesPerSecond = queueStore.jobs
+            .first(where: { queueStore.displayStatus(for: $0) == .running })?
+            .currentFramesPerSecond,
+           framesPerSecond > 0 {
+            parts.append(String(format: "%.1f FPS", framesPerSecond))
+        }
+        return parts.isEmpty ? "Queue ready" : parts.joined(separator: " · ")
     }
 
     private var failureGroupsSummary: some View {
@@ -273,140 +314,42 @@ struct QueueListView: View {
     private var recommendedPresetCards: [(title: String, subtitle: String, presetName: String)] {
         [
             ("Fast MP4 (H.264)", "Quick export for broad playback.", "MP4 — H.264 (Fast)"),
-            ("Efficient HEVC", "Smaller modern playback default.", "MP4 — HEVC (Balanced)"),
+            ("Efficient HEVC", "Telegram-style settings with smaller HEVC video.", ConversionPreset.efficientHEVCPresetName),
             ("Editing ProRes", "Large edit-friendly mezzanine output.", "MOV — ProRes 422 (Editing)")
         ]
     }
 }
 
 private struct QueueRowView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let job: VideoJob
     let displayStatus: QueueJobDisplayStatus
     let previewURL: URL
     let thumbnail: NSImage?
     let isSelected: Bool
-    @Binding var isDetailsExpanded: Bool
     let onReveal: () -> Void
     let onOpenOutput: () -> Void
     let onRetry: () -> Void
+    let onShowDetails: () -> Void
     let onRemove: () -> Void
     let onCancel: () -> Void
-    let onOpenSource: () -> Void
-    let onOpenOutputFolder: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 10) {
-                thumbnailView
+        VStack(alignment: .leading, spacing: 0) {
+            headerContent
+                .padding(12)
+                .background(headerBackgroundColor)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(job.sourceDisplayName)
-                        .font(.headline)
-                        .lineLimit(1)
-                    Text(job.formatTransitionSummary)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    Text(secondaryLine)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 12)
-
-                if let dynamicRangeBadgeText {
-                    Text(dynamicRangeBadgeText)
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 4)
-                        .background(dynamicRangeBadgeBackground)
-                        .foregroundStyle(dynamicRangeBadgeForeground)
-                        .clipShape(Capsule())
-                        .lineLimit(1)
-                }
-
-                if displayStatus == .failed {
-                    Text(displayStatus.title)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.red)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(Color.red.opacity(0.12))
-                        .clipShape(Capsule())
-                } else {
-                    HStack(spacing: 6) {
-                        Text(displayStatus.title)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(statusColor)
-
-                        if let progressPercentageText {
-                            Text(progressPercentageText)
-                                .font(.caption.monospacedDigit().weight(.semibold))
-                                .foregroundStyle(statusColor)
-                        }
-                    }
-                }
-            }
-
-            ProgressView(value: job.progress)
-                .opacity(job.status == .completed ? 0.35 : 1)
-
-            HStack(spacing: 10) {
-                Text("Input \(FileSizeFormatterUtil.string(from: job.inputFileSizeBytes ?? job.metadata?.fileSizeBytes))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Text(sizeSummaryText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if job.result?.outputFileSize == nil, let eta = job.estimatedRemainingSeconds {
-                    Text("ETA \(etaString(eta))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if let message = job.errorSummary, !message.isEmpty {
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                Spacer()
-
-                if displayStatus == .running {
-                    Button("Cancel", action: onCancel)
-                        .buttonStyle(.link)
-                }
-
-                if job.status == .completed {
-                    Button("Reveal", action: onReveal)
-                        .buttonStyle(.link)
-                }
-
-                if job.status == .failed || job.status == .cancelled {
-                    Button("Retry", action: onRetry)
-                        .buttonStyle(.link)
-                }
-
-                if job.status == .failed || job.status == .cancelled {
-                    Button(isDetailsExpanded ? "Hide Details" : "Details") {
-                        isDetailsExpanded.toggle()
-                    }
-                    .buttonStyle(.link)
-                }
-
-                Button("Remove", role: .destructive, action: onRemove)
-                    .buttonStyle(.link)
-            }
-
-            if isDetailsExpanded, job.status == .failed || job.status == .cancelled {
-                failureDetailsView
-            }
         }
+        .background(Color(nsColor: .windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(rowBorderColor, lineWidth: 1)
+        )
         .padding(.vertical, 6)
         .contentShape(Rectangle())
-        .background(isSelected ? Color.accentColor.opacity(0.05) : Color.clear)
         .overlay(alignment: .topLeading) {
             QueueRowDoubleClickBridge {
                 guard job.status == .completed else { return }
@@ -421,6 +364,7 @@ private struct QueueRowView: View {
             }
             if job.status == .failed || job.status == .cancelled {
                 Button("Retry", action: onRetry)
+                Button("Show Details", action: onShowDetails)
             }
             if displayStatus == .running {
                 Button("Cancel", action: onCancel)
@@ -429,84 +373,137 @@ private struct QueueRowView: View {
         }
     }
 
-    private var failureDetailsView: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(job.errorSummary ?? "Conversion failed.")
-                .font(.caption.weight(.semibold))
+    private var headerContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                thumbnailView
 
-            if let ffmpegVersion = job.ffmpegVersion, !ffmpegVersion.isEmpty {
-                Text(ffmpegVersion)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-            }
-
-            if let details = job.errorLog, !details.isEmpty {
-                ScrollView(.vertical) {
-                    Text(details)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: 160)
-            } else {
-                Text("No details available.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let commandLine = job.commandLine, !commandLine.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Executed command")
+                    Text(job.sourceDisplayName)
+                        .font(.headline)
+                        .foregroundColor(rowStyle.primaryTextColor)
+                        .lineLimit(1)
+                    Text(job.formatTransitionSummary)
+                        .font(.caption2)
+                        .foregroundColor(rowStyle.secondaryTextColor)
+                        .lineLimit(1)
+                    Text(secondaryLine)
+                        .font(.caption)
+                        .foregroundColor(rowStyle.secondaryTextColor)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 12)
+
+                if let dynamicRangeBadgeText {
+                    Text(dynamicRangeBadgeText)
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    ScrollView(.horizontal) {
-                        Text(commandLine)
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(dynamicRangeBadgeBackground)
+                        .foregroundColor(dynamicRangeBadgeForeground)
+                        .clipShape(Capsule())
+                        .lineLimit(1)
+                }
+
+                if displayStatus == .failed {
+                    Text(displayStatus.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(rowStyle.failedBadgeTextColor)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(rowStyle.failedBadgeBackgroundColor)
+                        .clipShape(Capsule())
+                } else {
+                    HStack(spacing: 6) {
+                        Text(displayStatus.title)
+                            .font(.caption.weight(.medium))
+                            .foregroundColor(rowStyle.badgeTextColor)
+
+                        if let progressPercentageText {
+                            Text(progressPercentageText)
+                                .font(.caption.monospacedDigit().weight(.semibold))
+                                .foregroundColor(rowStyle.badgeTextColor)
+                        }
                     }
-                    .frame(maxHeight: 48)
                 }
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 10) {
-                    if let details = job.errorLog, !details.isEmpty {
-                        Button("Copy Error Log") {
-                            copyToPasteboard(details)
-                        }
-                        .buttonStyle(.link)
-                    }
-                    if let commandLine = job.commandLine, !commandLine.isEmpty {
-                        Button("Copy Command") {
-                            copyToPasteboard(commandLine)
-                        }
-                        .buttonStyle(.link)
-                    }
-                    if let ffmpegVersion = job.ffmpegVersion, !ffmpegVersion.isEmpty {
-                        Button("Copy FFmpeg Version") {
-                            copyToPasteboard(ffmpegVersion)
-                        }
-                        .buttonStyle(.link)
-                    }
+            ProgressView(value: job.progress)
+                .opacity(job.status == .completed ? 0.35 : 1)
+
+            HStack(spacing: 10) {
+                Text("Input \(FileSizeFormatterUtil.string(from: job.inputFileSizeBytes ?? job.metadata?.fileSizeBytes))")
+                    .font(.caption)
+                    .foregroundColor(rowStyle.tertiaryTextColor)
+
+                Text(sizeSummaryText)
+                    .font(.caption)
+                    .foregroundColor(rowStyle.tertiaryTextColor)
+
+                if let conversionElapsedText {
+                    Text("Time \(conversionElapsedText)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(rowStyle.tertiaryTextColor)
                 }
 
-                HStack(spacing: 10) {
-                    Button("Open Source", action: onOpenSource)
-                        .buttonStyle(.link)
-
-                    if job.result?.outputURL != nil {
-                        Button("Reveal Output", action: onReveal)
-                            .buttonStyle(.link)
-                        Button("Open Output Folder", action: onOpenOutputFolder)
-                            .buttonStyle(.link)
-                    }
+                if let processingSpeedText {
+                    Text(processingSpeedText)
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(rowStyle.tertiaryTextColor)
+                        .help("Current FFmpeg processing speed in frames per second.")
                 }
+
+                if job.result?.outputFileSize == nil, let eta = job.estimatedRemainingSeconds {
+                    Text("ETA \(etaString(eta))")
+                        .font(.caption)
+                        .foregroundColor(rowStyle.tertiaryTextColor)
+                } else if let message = job.errorSummary, !message.isEmpty {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundColor(rowStyle.tertiaryTextColor)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                if displayStatus == .running {
+                    Button("Cancel", action: onCancel)
+                        .buttonStyle(.link)
+                        .tint(rowStyle.linkTextColor)
+                }
+
+                if job.status == .completed {
+                    Button("Reveal", action: onReveal)
+                        .buttonStyle(.link)
+                        .tint(rowStyle.linkTextColor)
+                }
+
+                if job.status == .failed || job.status == .cancelled {
+                    Button("Retry", action: onRetry)
+                        .buttonStyle(.link)
+                        .tint(rowStyle.linkTextColor)
+                }
+
+                if job.status == .failed || job.status == .cancelled {
+                    Button("Details", action: onShowDetails)
+                    .buttonStyle(.link)
+                    .tint(rowStyle.linkTextColor)
+                }
+
+                Button("Remove", action: onRemove)
+                    .buttonStyle(.link)
+                    .tint(rowStyle.destructiveLinkTextColor)
             }
         }
-        .font(.caption)
-        .padding(.top, 4)
+    }
+
+    private var headerBackgroundColor: Color {
+        isSelected ? Color.accentColor.opacity(colorScheme == .dark ? 0.2 : 0.12) : Color.clear
+    }
+
+    private var rowBorderColor: Color {
+        isSelected ? Color.accentColor.opacity(0.6) : Color(nsColor: .separatorColor).opacity(0.45)
     }
 
     private var secondaryLine: String {
@@ -543,7 +540,7 @@ private struct QueueRowView: View {
 
     private var dynamicRangeBadgeForeground: Color {
         guard let metadata = job.metadata, metadata.isHDR else {
-            return .secondary
+            return isSelected ? Color(nsColor: .secondaryLabelColor) : .secondary
         }
         return .orange
     }
@@ -575,21 +572,6 @@ private struct QueueRowView: View {
         return "\(video) + \(audio)"
     }
 
-    private var statusColor: Color {
-        switch displayStatus {
-        case .completed:
-            return .green
-        case .failed, .cancelled:
-            return .red
-        case .running:
-            return .blue
-        case .paused:
-            return .orange
-        default:
-            return .secondary
-        }
-    }
-
     private var progressPercentageText: String? {
         switch displayStatus {
         case .running, .paused, .completed:
@@ -607,6 +589,28 @@ private struct QueueRowView: View {
         formatter.allowedUnits = [.minute, .second]
         formatter.unitsStyle = .abbreviated
         return formatter.string(from: eta) ?? "n/a"
+    }
+
+    private var conversionElapsedText: String? {
+        guard job.status.isTerminal else { return nil }
+        let elapsed = job.result?.elapsedSeconds ?? {
+            guard let startedAt = job.startedAt, let completedAt = job.completedAt else { return nil }
+            return max(0, completedAt.timeIntervalSince(startedAt))
+        }()
+        guard let elapsed else { return nil }
+
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = elapsed >= 3600 ? [.hour, .minute, .second] : [.minute, .second]
+        formatter.unitsStyle = .abbreviated
+        formatter.zeroFormattingBehavior = [.pad]
+        return formatter.string(from: elapsed)
+    }
+
+    private var processingSpeedText: String? {
+        guard displayStatus == .running || displayStatus == .paused,
+              let framesPerSecond = job.currentFramesPerSecond,
+              framesPerSecond > 0 else { return nil }
+        return String(format: "%.1f FPS", framesPerSecond)
     }
 
     private var sizeSummaryText: String {
@@ -638,12 +642,6 @@ private struct QueueRowView: View {
         return value
     }
 
-    private func copyToPasteboard(_ value: String) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(value, forType: .string)
-    }
-
     private var thumbnailView: some View {
         let image = thumbnail ?? QueueThumbnailStore.placeholderImage(for: previewURL)
         return Image(nsImage: image)
@@ -655,6 +653,197 @@ private struct QueueRowView: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
             )
+    }
+
+    private var rowStyle: QueueRowStyle {
+        QueueRowStyle(
+            jobStatus: displayStatus,
+            isSelected: isSelected
+        )
+    }
+
+}
+
+struct QueueFailureInspectorView: View {
+    let job: VideoJob
+    let onClose: () -> Void
+    let onRetry: () -> Void
+    let onOpenSource: () -> Void
+    let onRevealOutput: () -> Void
+    let onOpenOutputFolder: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: job.status == .cancelled ? "stop.circle" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(job.status == .cancelled ? Color.secondary : Color.red)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(job.status == .cancelled ? "Cancelled Task" : "Conversion Details")
+                        .font(.headline)
+                    Text(job.sourceDisplayName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help("Close details")
+            }
+            .padding(14)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(job.errorSummary ?? (job.status == .cancelled ? "The conversion was cancelled." : "Conversion failed."))
+                        .font(.callout.weight(.semibold))
+
+                    if let ffmpegVersion = job.ffmpegVersion, !ffmpegVersion.isEmpty {
+                        inspectorSection(title: "FFmpeg") {
+                            Text(ffmpegVersion)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                            copyButton("Copy Version", value: ffmpegVersion)
+                        }
+                    }
+
+                    inspectorSection(title: "Error Log") {
+                        if let details = job.errorLog, !details.isEmpty {
+                            Text(details)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .padding(10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color(nsColor: .textBackgroundColor))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            copyButton("Copy Error Log", value: details)
+                        } else {
+                            Text("No details available.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if let commandLine = job.commandLine, !commandLine.isEmpty {
+                        inspectorSection(title: "Executed Command") {
+                            ScrollView(.horizontal, showsIndicators: true) {
+                                Text(commandLine)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .fixedSize(horizontal: true, vertical: false)
+                                    .padding(10)
+                            }
+                            .background(Color(nsColor: .textBackgroundColor))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            copyButton("Copy Command", value: commandLine)
+                        }
+                    }
+
+                    Divider()
+
+                    HStack(spacing: 10) {
+                        Button("Retry", action: onRetry)
+                            .buttonStyle(.borderedProminent)
+                        Button("Open Source", action: onOpenSource)
+                    }
+
+                    if job.result?.outputURL != nil {
+                        HStack(spacing: 10) {
+                            Button("Reveal Output", action: onRevealOutput)
+                            Button("Output Folder", action: onOpenOutputFolder)
+                        }
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Conversion details for \(job.sourceDisplayName)")
+    }
+
+    private func inspectorSection<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func copyButton(_ title: String, value: String) -> some View {
+        Button(title) {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(value, forType: .string)
+        }
+        .buttonStyle(.link)
+        .font(.caption)
+    }
+}
+
+private struct QueueRowStyle {
+    let jobStatus: QueueJobDisplayStatus
+    let isSelected: Bool
+
+    var primaryTextColor: Color {
+        isSelected ? Color(nsColor: .labelColor) : .primary
+    }
+
+    var secondaryTextColor: Color {
+        isSelected ? Color(nsColor: .secondaryLabelColor) : .secondary
+    }
+
+    var tertiaryTextColor: Color {
+        isSelected ? Color(nsColor: .secondaryLabelColor) : .secondary
+    }
+
+    var badgeTextColor: Color {
+        statusAccentColor
+    }
+
+    var linkTextColor: Color {
+        isSelected ? Color(nsColor: .linkColor) : .accentColor
+    }
+
+    var destructiveLinkTextColor: Color {
+        isSelected ? Color(nsColor: .systemRed) : .red
+    }
+
+    var monospaceTextColor: Color {
+        isSelected ? Color(nsColor: .labelColor) : .primary
+    }
+
+    var failedBadgeTextColor: Color {
+        .red
+    }
+
+    var failedBadgeBackgroundColor: Color {
+        Color.red.opacity(0.12)
+    }
+
+    private var statusAccentColor: Color {
+        switch jobStatus {
+        case .completed:
+            return .green
+        case .failed, .cancelled:
+            return .red
+        case .running:
+            return .blue
+        case .paused:
+            return .orange
+        default:
+            return .secondary
+        }
     }
 }
 
@@ -686,31 +875,6 @@ private enum QueueFilter: String, CaseIterable, Identifiable {
         case .failed:
             return status == .failed || status == .cancelled
         }
-    }
-}
-
-@MainActor
-final class QueueRowPresentationState: ObservableObject {
-    @Published private(set) var expandedDetailJobIDs = Set<UUID>()
-
-    func isDetailsExpanded(for jobID: UUID) -> Bool {
-        expandedDetailJobIDs.contains(jobID)
-    }
-
-    func setDetailsExpanded(_ isExpanded: Bool, for jobID: UUID) {
-        if isExpanded {
-            expandedDetailJobIDs.insert(jobID)
-        } else {
-            expandedDetailJobIDs.remove(jobID)
-        }
-    }
-
-    func toggleDetails(for jobID: UUID) {
-        setDetailsExpanded(!isDetailsExpanded(for: jobID), for: jobID)
-    }
-
-    func reconcile(validJobIDs: Set<UUID>) {
-        expandedDetailJobIDs.formIntersection(validJobIDs)
     }
 }
 

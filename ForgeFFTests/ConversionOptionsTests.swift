@@ -2,6 +2,69 @@ import XCTest
 @testable import ForgeFF
 
 final class ConversionOptionsTests: XCTestCase {
+    func testTelegramPresetKeepsSourceDimensionsAndUsesCompatibleMediaSettings() throws {
+        let preset = try XCTUnwrap(
+            ConversionPreset.builtIns.first { $0.name == ConversionPreset.telegramPresetName }
+        )
+        var options = ConversionOptions.default
+
+        options.apply(preset: preset)
+
+        XCTAssertEqual(options.container, .mp4)
+        XCTAssertEqual(options.videoCodec, .h264)
+        XCTAssertEqual(options.audioCodec, .aac)
+        XCTAssertEqual(options.qualityProfile, .better)
+        XCTAssertEqual(options.effectiveEncoderOption, .medium)
+        XCTAssertEqual(options.resolutionOverride, .preserve)
+        XCTAssertEqual(options.frameRateOption, .keep)
+        XCTAssertEqual(options.videoPixelFormat, .yuv420p)
+        XCTAssertEqual(options.audioBitrateKbps, 192)
+        XCTAssertEqual(options.audioChannels, 2)
+        XCTAssertTrue(options.webOptimization)
+        XCTAssertFalse(options.useHardwareAcceleration)
+    }
+
+    func testEfficientHEVCPresetMatchesTelegramExceptForVideoCodec() throws {
+        let telegram = try XCTUnwrap(
+            ConversionPreset.builtIns.first { $0.name == ConversionPreset.telegramPresetName }
+        )
+        let efficientHEVC = try XCTUnwrap(
+            ConversionPreset.builtIns.first { $0.name == ConversionPreset.efficientHEVCPresetName }
+        )
+
+        XCTAssertEqual(efficientHEVC.container, telegram.container)
+        XCTAssertEqual(efficientHEVC.videoCodec, .hevc)
+        XCTAssertEqual(telegram.videoCodec, .h264)
+        XCTAssertEqual(efficientHEVC.audioCodec, telegram.audioCodec)
+        XCTAssertEqual(efficientHEVC.quality, telegram.quality)
+        XCTAssertEqual(efficientHEVC.encoderOption, telegram.encoderOption)
+        XCTAssertEqual(efficientHEVC.enableHardwareAcceleration, telegram.enableHardwareAcceleration)
+        XCTAssertEqual(efficientHEVC.webOptimization, telegram.webOptimization)
+        XCTAssertEqual(efficientHEVC.videoPixelFormat, telegram.videoPixelFormat)
+        XCTAssertEqual(efficientHEVC.audioBitrateKbps, telegram.audioBitrateKbps)
+        XCTAssertEqual(efficientHEVC.audioChannels, telegram.audioChannels)
+
+        var options = ConversionOptions.default
+        options.apply(preset: efficientHEVC)
+        XCTAssertEqual(options.resolutionOverride, .preserve)
+        XCTAssertEqual(options.frameRateOption, .keep)
+    }
+
+    func testRenamedBuiltInPresetNamesResolveLegacySelections() throws {
+        XCTAssertEqual(
+            ConversionPreset.builtIn(named: "MP4 — Telegram (Original Resolution)")?.name,
+            ConversionPreset.telegramPresetName
+        )
+        XCTAssertEqual(
+            ConversionPreset.builtIn(named: "MP4 — Smallest File (HEVC)")?.name,
+            ConversionPreset.efficientHEVCPresetName
+        )
+    }
+
+    func testEditingProResRemainsLastBuiltInPreset() {
+        XCTAssertEqual(ConversionPreset.builtIns.last?.name, "MOV — ProRes 422 (Editing)")
+    }
+
     func testResolutionOrderIncludes2KInExpectedPosition() {
         XCTAssertEqual(
             ConversionOptions.orderedResolutionChoices,
@@ -138,7 +201,7 @@ final class PresetBehaviorTests: XCTestCase {
         return QueueViewModel(queueStore: queueStore, userPresetStore: userPresetStore)
     }
 
-    func testManualQualityChangeMarksPresetAsCustomizedButKeepsSelection() {
+    func testManualQualityChangeMarksPresetAsCustomizedAndSwitchesSelectionToCustom() {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("json")
@@ -154,6 +217,8 @@ final class PresetBehaviorTests: XCTestCase {
         viewModel.updateOptions { $0.qualityProfile = .better }
         XCTAssertEqual(viewModel.draftOptions.presetName, preset.name)
         XCTAssertTrue(viewModel.isPresetCustomized)
+        XCTAssertEqual(viewModel.selectedPresetID, ConversionPreset.custom.name)
+        XCTAssertEqual(viewModel.modifiedBasePreset?.name, preset.name)
     }
 
     func testPresetCustomizationClearsWhenSettingsReturnToPresetState() {
@@ -169,11 +234,13 @@ final class PresetBehaviorTests: XCTestCase {
         viewModel.selectPreset(preset)
         viewModel.updateOptions { $0.resolutionOverride = .custom(width: 1440, height: 900) }
         XCTAssertTrue(viewModel.isPresetCustomized)
+        XCTAssertEqual(viewModel.selectedPresetID, ConversionPreset.custom.name)
 
         viewModel.updateOptions { $0.resolutionOverride = .preserve }
 
         XCTAssertEqual(viewModel.draftOptions.presetName, preset.name)
         XCTAssertFalse(viewModel.isPresetCustomized)
+        XCTAssertEqual(viewModel.selectedPresetID, preset.name)
     }
 
     func testProgrammaticPresetApplyDoesNotSwitchToCustom() {
@@ -207,6 +274,7 @@ final class PresetBehaviorTests: XCTestCase {
         viewModel.updateOptions { $0.encoderOption = .slow }
         XCTAssertEqual(viewModel.draftOptions.presetName, preset.name)
         XCTAssertTrue(viewModel.isPresetCustomized)
+        XCTAssertEqual(viewModel.selectedPresetID, ConversionPreset.custom.name)
     }
 
     func testDisablingCustomCommandRestoresPresetMatchWhenNoOtherOverridesRemain() {
@@ -225,6 +293,7 @@ final class PresetBehaviorTests: XCTestCase {
             $0.customCommandTemplate = #"ffmpeg -hide_banner -i "{input}" -c:v libx264 -crf 21 "{output}""#
         }
         XCTAssertTrue(viewModel.isPresetCustomized)
+        XCTAssertEqual(viewModel.selectedPresetID, ConversionPreset.custom.name)
 
         viewModel.updateOptions {
             $0.isCustomCommandOverrideEnabled = false
@@ -232,6 +301,7 @@ final class PresetBehaviorTests: XCTestCase {
 
         XCTAssertEqual(viewModel.draftOptions.presetName, preset.name)
         XCTAssertFalse(viewModel.isPresetCustomized)
+        XCTAssertEqual(viewModel.selectedPresetID, preset.name)
     }
 
     func testUserPresetStorePersistsAndDeletes() throws {
@@ -296,8 +366,10 @@ final class PresetBehaviorTests: XCTestCase {
         }
         viewModel.selectUserPreset(preset)
         XCTAssertEqual(viewModel.draftOptions.presetName, preset.name)
+        XCTAssertEqual(viewModel.selectedPresetID, preset.name)
 
         viewModel.deleteUserPreset(id: preset.id)
         XCTAssertEqual(viewModel.draftOptions.presetName, ConversionPreset.custom.name)
+        XCTAssertEqual(viewModel.selectedPresetID, ConversionPreset.custom.name)
     }
 }

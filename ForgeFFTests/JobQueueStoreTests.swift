@@ -323,6 +323,100 @@ final class JobQueueStoreTests: XCTestCase {
         XCTAssertEqual(store.footerSummary.queued, 2)
     }
 
+    func testNewReadyJobJoinsFullQueueScopeWhileRunning() throws {
+        let settings = makeConfiguredSettingsStore()
+        let history = HistoryStore()
+        let store = JobQueueStore(settingsStore: settings, historyStore: history)
+
+        let baseURL = FileManager.default.temporaryDirectory
+        let runningURL = baseURL.appendingPathComponent("forgeff-test-running-full-\(UUID().uuidString).mkv")
+        let newURL = baseURL.appendingPathComponent("forgeff-test-new-full-\(UUID().uuidString).mkv")
+        try Data(repeating: 1, count: 1024).write(to: runningURL)
+        try Data(repeating: 1, count: 1024).write(to: newURL)
+        defer {
+            try? FileManager.default.removeItem(at: runningURL)
+            try? FileManager.default.removeItem(at: newURL)
+        }
+
+        var runningJob = VideoJob(sourceURL: runningURL)
+        runningJob.status = .running
+        var newJob = VideoJob(sourceURL: newURL)
+        newJob.status = .ready
+
+        store._debugSetJobs([runningJob, newJob])
+        store._debugSetExecutionState(
+            .running,
+            scopeMode: .fullQueue,
+            scopeJobIDs: [runningJob.id],
+            activeJobID: runningJob.id
+        )
+
+        store._debugAdmitNewJobIntoActiveScope(jobID: newJob.id)
+
+        let executionState = store._debugExecutionState()
+        XCTAssertTrue(executionState.scopeJobIDs.contains(newJob.id))
+        XCTAssertEqual(store.displayStatus(for: newJob.id), .inQueue)
+    }
+
+    func testNewReadyJobJoinsSelectionScopeWhileRunning() throws {
+        let settings = makeConfiguredSettingsStore()
+        let history = HistoryStore()
+        let store = JobQueueStore(settingsStore: settings, historyStore: history)
+
+        let baseURL = FileManager.default.temporaryDirectory
+        let runningURL = baseURL.appendingPathComponent("forgeff-test-running-selection-\(UUID().uuidString).mkv")
+        let newURL = baseURL.appendingPathComponent("forgeff-test-new-selection-\(UUID().uuidString).mkv")
+        try Data(repeating: 1, count: 1024).write(to: runningURL)
+        try Data(repeating: 1, count: 1024).write(to: newURL)
+        defer {
+            try? FileManager.default.removeItem(at: runningURL)
+            try? FileManager.default.removeItem(at: newURL)
+        }
+
+        var runningJob = VideoJob(sourceURL: runningURL)
+        runningJob.status = .running
+        var newJob = VideoJob(sourceURL: newURL)
+        newJob.status = .ready
+
+        store._debugSetJobs([runningJob, newJob])
+        store._debugSetExecutionState(
+            .running,
+            scopeMode: .selection,
+            scopeJobIDs: [runningJob.id],
+            activeJobID: runningJob.id
+        )
+
+        store._debugAdmitNewJobIntoActiveScope(jobID: newJob.id)
+
+        let executionState = store._debugExecutionState()
+        XCTAssertTrue(executionState.scopeJobIDs.contains(newJob.id))
+        XCTAssertEqual(store.displayStatus(for: newJob.id), .inQueue)
+    }
+
+    func testAnalyzingJobJoinsActiveQueueBeforeMetadataIsReady() throws {
+        let settings = makeConfiguredSettingsStore()
+        let history = HistoryStore()
+        let store = JobQueueStore(settingsStore: settings, historyStore: history)
+
+        var runningJob = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/forgeff-running.mov"))
+        runningJob.status = .running
+        var analyzingJob = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/forgeff-analyzing.mov"))
+        analyzingJob.status = .analyzing
+
+        store._debugSetJobs([runningJob, analyzingJob])
+        store._debugSetExecutionState(
+            .running,
+            scopeMode: .selection,
+            scopeJobIDs: [runningJob.id],
+            activeJobID: runningJob.id
+        )
+
+        store._debugAdmitNewJobIntoActiveScope(jobID: analyzingJob.id)
+
+        XCTAssertTrue(store._debugExecutionState().scopeJobIDs.contains(analyzingJob.id))
+        XCTAssertEqual(store.displayStatus(for: analyzingJob.id), .analyzing)
+    }
+
     func testDisplayStatusPromotesNextJobToRunningAfterCompletion() throws {
         let settings = makeConfiguredSettingsStore()
         let history = HistoryStore()
@@ -476,19 +570,4 @@ final class JobQueueStoreTests: XCTestCase {
         XCTAssertEqual(attachments.map(\.languageCode), ["eng", "spa"])
     }
 
-    func testQueueRowPresentationStatePersistsExpandedDetailsAcrossRefresh() {
-        let jobID = UUID()
-        let state = QueueRowPresentationState()
-
-        XCTAssertFalse(state.isDetailsExpanded(for: jobID))
-
-        state.toggleDetails(for: jobID)
-        XCTAssertTrue(state.isDetailsExpanded(for: jobID))
-
-        state.reconcile(validJobIDs: [jobID])
-        XCTAssertTrue(state.isDetailsExpanded(for: jobID))
-
-        state.reconcile(validJobIDs: [])
-        XCTAssertFalse(state.isDetailsExpanded(for: jobID))
-    }
 }

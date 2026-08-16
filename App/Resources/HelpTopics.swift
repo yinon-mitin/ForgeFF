@@ -211,6 +211,7 @@ extension HelpTopic {
                 title: "HDR to SDR",
                 bullets: [
                     "Use this when an HDR source needs a safer SDR export for standard displays.",
+                    "Choose Apple VideoToolbox or FFmpeg filters as the tone-mapping engine when the toggle is on.",
                     "Leave it off when you want to preserve HDR output."
                 ]
             )
@@ -218,8 +219,10 @@ extension HelpTopic {
             return HelpTopicContent(
                 title: "Tone Map Method",
                 bullets: [
-                    "This changes how bright HDR highlights are compressed into SDR.",
-                    "Hable is a good default, and Reinhard can look gentler on highlights."
+                    "Apple VideoToolbox handles tone mapping automatically and does not expose a manual method.",
+                    "When FFmpeg tone mapping is selected, this changes how bright HDR highlights are compressed into SDR.",
+                    "Reinhard is the safer default when you want SDR brightness closer to standard players.",
+                    "Hable preserves highlight detail well, but it can look a bit darker overall."
                 ]
             )
         case .rename:

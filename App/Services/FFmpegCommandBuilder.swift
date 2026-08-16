@@ -9,6 +9,7 @@ enum FFmpegCommandBuilder {
 
     enum CommandInvocationError: Error, Equatable {
         case invalidCustomTemplate(String)
+        case unsupportedToneMapping(String)
     }
 
     struct CustomCommandTemplateValidation: Equatable {
@@ -18,6 +19,27 @@ enum FFmpegCommandBuilder {
     enum Mode: Equatable {
         case singlePass
         case pass(Int, logPrefix: String)
+    }
+
+    struct InputSourceLayout: Equatable {
+        let videoSourceURL: URL
+        let originalMediaSourceURL: URL?
+
+        static func standard(sourceURL: URL) -> InputSourceLayout {
+            InputSourceLayout(videoSourceURL: sourceURL, originalMediaSourceURL: nil)
+        }
+
+        static func toneMappedIntermediate(videoSourceURL: URL, originalMediaSourceURL: URL) -> InputSourceLayout {
+            InputSourceLayout(videoSourceURL: videoSourceURL, originalMediaSourceURL: originalMediaSourceURL)
+        }
+
+        var ancillarySourceInputIndex: Int {
+            originalMediaSourceURL == nil ? 0 : 1
+        }
+
+        var firstAttachmentInputIndex: Int {
+            originalMediaSourceURL == nil ? 1 : 2
+        }
     }
 
     static func outputURL(for job: VideoJob, settings: AppSettings) -> URL {
@@ -41,7 +63,14 @@ enum FFmpegCommandBuilder {
     }
 
     static func buildArguments(for job: VideoJob, settings: AppSettings, mode: Mode = .singlePass) -> [String] {
-        buildArguments(for: job, settings: settings, capabilities: .none, mode: mode)
+        buildArguments(
+            for: job,
+            settings: settings,
+            capabilities: .none,
+            filterCapabilities: .fullySupported,
+            sourceLayout: nil,
+            mode: mode
+        )
     }
 
     static func buildInvocation(
@@ -49,6 +78,8 @@ enum FFmpegCommandBuilder {
         ffmpegURL: URL,
         settings: AppSettings,
         capabilities: FFmpegEncoderCapabilities = .none,
+        filterCapabilities: FFmpegFilterCapabilities = .fullySupported,
+        sourceLayout: InputSourceLayout? = nil,
         mode: Mode = .singlePass
     ) throws -> CommandInvocation {
         if job.options.isCustomCommandEnabled {
@@ -60,7 +91,18 @@ enum FFmpegCommandBuilder {
             )
         }
 
-        let args = buildArguments(for: job, settings: settings, capabilities: capabilities, mode: mode)
+        if let toneMappingError = toneMappingSupportError(for: job, filterCapabilities: filterCapabilities) {
+            throw CommandInvocationError.unsupportedToneMapping(toneMappingError)
+        }
+
+        let args = buildArguments(
+            for: job,
+            settings: settings,
+            capabilities: capabilities,
+            filterCapabilities: filterCapabilities,
+            sourceLayout: sourceLayout,
+            mode: mode
+        )
         return CommandInvocation(
             executableURL: ffmpegURL,
             arguments: args,
@@ -72,10 +114,17 @@ enum FFmpegCommandBuilder {
         for job: VideoJob,
         settings: AppSettings,
         capabilities: FFmpegEncoderCapabilities,
+        filterCapabilities: FFmpegFilterCapabilities = .fullySupported,
+        sourceLayout: InputSourceLayout? = nil,
         mode: Mode = .singlePass
     ) -> [String] {
         let outputURL = outputURL(for: job, settings: settings)
-        var arguments = ["-hide_banner", settings.allowOverwrite ? "-y" : "-n", "-i", job.sourceURL.path]
+        let inputLayout = sourceLayout ?? .standard(sourceURL: job.sourceURL)
+        var arguments = ["-hide_banner", settings.allowOverwrite ? "-y" : "-n", "-i", inputLayout.videoSourceURL.path]
+
+        if let originalMediaSourceURL = inputLayout.originalMediaSourceURL {
+            arguments.append(contentsOf: ["-i", originalMediaSourceURL.path])
+        }
 
         for attachment in job.options.externalAudioAttachments {
             arguments.append(contentsOf: ["-i", attachment.fileURL.path])
@@ -85,32 +134,36 @@ enum FFmpegCommandBuilder {
             arguments.append(contentsOf: ["-i", subtitle.fileURL.path])
         }
 
-        if job.options.removeMetadata {
-            arguments.append(contentsOf: ["-map_metadata", "-1"])
-        }
-
-        if job.options.removeChapters {
-            arguments.append(contentsOf: ["-map_chapters", "-1"])
-        }
+        appendMetadataAndChapterMapping(
+            for: job,
+            inputLayout: inputLayout,
+            into: &arguments
+        )
 
         if job.options.isAudioOnly {
             arguments.append("-vn")
-            appendAudioMaps(for: job, into: &arguments)
+            appendAudioMaps(for: job, inputLayout: inputLayout, into: &arguments)
         } else {
             arguments.append(contentsOf: ["-map", "0:v:0"])
-            appendAudioMaps(for: job, into: &arguments)
+            appendAudioMaps(for: job, inputLayout: inputLayout, into: &arguments)
             if !job.options.externalAudioAttachments.isEmpty {
                 arguments.append("-shortest")
             }
 
             if !job.options.removeEmbeddedSubtitles {
                 if job.options.effectiveSubtitleMode != .remove {
-                    arguments.append(contentsOf: ["-map", "0:s?"])
+                    arguments.append(contentsOf: ["-map", "\(inputLayout.ancillarySourceInputIndex):s?"])
                 }
             }
 
-            appendExternalSubtitleMaps(for: job, into: &arguments)
-            appendVideoEncoding(for: job, settings: settings, capabilities: capabilities, into: &arguments)
+            appendExternalSubtitleMaps(for: job, inputLayout: inputLayout, into: &arguments)
+            appendVideoEncoding(
+                for: job,
+                settings: settings,
+                capabilities: capabilities,
+                filterCapabilities: filterCapabilities,
+                into: &arguments
+            )
         }
 
         appendAudioEncoding(for: job, into: &arguments)
@@ -203,6 +256,7 @@ enum FFmpegCommandBuilder {
         for job: VideoJob,
         settings: AppSettings,
         capabilities: FFmpegEncoderCapabilities,
+        filterCapabilities: FFmpegFilterCapabilities,
         into arguments: inout [String]
     ) {
         let useHardwareAcceleration = shouldUseVideoToolbox(for: job.options, settings: settings)
@@ -253,13 +307,21 @@ enum FFmpegCommandBuilder {
             appendAV1Encoding(for: job.options, capabilities: capabilities, into: &arguments)
         }
 
+        if shouldForceHEVCCompatibleTag(for: job.options) {
+            arguments.append(contentsOf: ["-tag:v", "hvc1"])
+        }
+
         if let frameRate = resolvedFrameRate(for: job.options) {
             arguments.append(contentsOf: ["-r", frameRate])
         }
 
-        let filters = buildFilters(for: job.options)
+        let filters = buildFilters(for: job, filterCapabilities: filterCapabilities)
         if !filters.isEmpty {
             arguments.append(contentsOf: ["-vf", filters.joined(separator: ",")])
+        }
+
+        if job.options.videoPixelFormat == .yuv420p {
+            arguments.append(contentsOf: ["-pix_fmt", "yuv420p"])
         }
     }
 
@@ -287,9 +349,13 @@ enum FFmpegCommandBuilder {
         arguments.append(contentsOf: ["-c:s", subtitleCodec])
     }
 
-    private static func appendExternalSubtitleMaps(for job: VideoJob, into arguments: inout [String]) {
+    private static func appendExternalSubtitleMaps(
+        for job: VideoJob,
+        inputLayout: InputSourceLayout,
+        into arguments: inout [String]
+    ) {
         guard job.options.effectiveSubtitleMode == .addExternal else { return }
-        let subtitleStartIndex = 1 + job.options.externalAudioAttachments.count
+        let subtitleStartIndex = inputLayout.firstAttachmentInputIndex + job.options.externalAudioAttachments.count
         for (index, subtitle) in job.options.subtitleAttachments.enumerated() {
             arguments.append(contentsOf: ["-map", "\(subtitleStartIndex + index):0"])
             let streamIndex = (job.metadata?.subtitleStreams.count ?? 0) + index
@@ -297,33 +363,82 @@ enum FFmpegCommandBuilder {
         }
     }
 
-    private static func appendAudioMaps(for job: VideoJob, into arguments: inout [String]) {
+    private static func appendAudioMaps(
+        for job: VideoJob,
+        inputLayout: InputSourceLayout,
+        into arguments: inout [String]
+    ) {
         if job.options.externalAudioAttachments.isEmpty {
-            arguments.append(contentsOf: ["-map", "0:a?"])
+            arguments.append(contentsOf: ["-map", "\(inputLayout.ancillarySourceInputIndex):a?"])
             return
         }
 
         for index in job.options.externalAudioAttachments.indices {
-            arguments.append(contentsOf: ["-map", "\(1 + index):a:0?"])
+            arguments.append(contentsOf: ["-map", "\(inputLayout.firstAttachmentInputIndex + index):a:0?"])
         }
     }
 
-    private static func buildFilters(for options: ConversionOptions) -> [String] {
+    private static func appendMetadataAndChapterMapping(
+        for job: VideoJob,
+        inputLayout: InputSourceLayout,
+        into arguments: inout [String]
+    ) {
+        if job.options.removeMetadata {
+            arguments.append(contentsOf: ["-map_metadata", "-1"])
+        } else if inputLayout.originalMediaSourceURL != nil {
+            arguments.append(contentsOf: ["-map_metadata", "\(inputLayout.ancillarySourceInputIndex)"])
+        }
+
+        if job.options.removeChapters {
+            arguments.append(contentsOf: ["-map_chapters", "-1"])
+        } else if inputLayout.originalMediaSourceURL != nil {
+            arguments.append(contentsOf: ["-map_chapters", "\(inputLayout.ancillarySourceInputIndex)"])
+        }
+    }
+
+    static func toneMappingSupportError(
+        for job: VideoJob,
+        filterCapabilities: FFmpegFilterCapabilities
+    ) -> String? {
+        guard job.options.enableHDRToSDR, job.metadata?.isHDR == true else { return nil }
+        return filterCapabilities.supportsToneMapping ? nil : unsupportedToneMappingHelpText
+    }
+
+    private static func buildFilters(
+        for job: VideoJob,
+        filterCapabilities: FFmpegFilterCapabilities
+    ) -> [String] {
+        let options = job.options
         var filters = [String]()
 
         if let dimensions = options.resolutionOverride.dimensions {
             filters.append("scale=\(dimensions.0):\(dimensions.1):force_original_aspect_ratio=decrease")
         }
 
-        if options.enableHDRToSDR {
-            let peak = String(format: "%.0f", options.toneMapPeak)
-            filters.append("zscale=t=linear:npl=\(peak)")
-            filters.append("tonemap=tonemap=\(options.toneMapMode.rawValue):peak=\(peak)")
-            filters.append("zscale=t=bt709:m=bt709:r=tv")
-            filters.append("format=yuv420p")
+        if options.enableHDRToSDR,
+           job.metadata?.isHDR == true,
+           let toneMappingPipeline = resolvedToneMappingPipeline(for: job, filterCapabilities: filterCapabilities) {
+            switch toneMappingPipeline {
+            case .libplacebo:
+                filters.append(libplaceboToneMappingFilter(for: options))
+            case .zscale:
+                let nominalPeak = String(format: "%.0f", resolvedToneMapNominalPeak(for: options))
+                filters.append("zscale=t=linear:npl=\(nominalPeak)")
+                filters.append("tonemap=tonemap=\(zscaleToneMapMode(for: options.toneMapMode)):desat=0.15")
+                filters.append("zscale=p=bt709:t=bt709:m=bt709:r=tv")
+                if filterCapabilities.supportsEq {
+                    filters.append("eq=gamma=1.05:contrast=1.02:brightness=0.02")
+                }
+                filters.append("format=yuv420p")
+            }
         }
 
         return filters
+    }
+
+    private enum ToneMappingPipeline {
+        case libplacebo
+        case zscale
     }
 
     private static func resolvedFrameRate(for options: ConversionOptions) -> String? {
@@ -385,6 +500,10 @@ enum FFmpegCommandBuilder {
         case .medium: return "medium"
         case .slow: return "slow"
         }
+    }
+
+    private static func shouldForceHEVCCompatibleTag(for options: ConversionOptions) -> Bool {
+        options.videoCodec == .hevc && (options.container == .mp4 || options.container == .mov)
     }
 
     private static func customOrDefaultVideoToolboxBitrateKbps(options: ConversionOptions, codec: VideoCodec) -> Int? {
@@ -470,6 +589,59 @@ enum FFmpegCommandBuilder {
         case .medium: return 4
         case .slow: return 2
         }
+    }
+
+    private static var unsupportedToneMappingHelpText: String {
+        "HDR tone mapping requires Apple's avconvert or an FFmpeg build with libplacebo or zscale."
+    }
+
+    private static func resolvedToneMappingPipeline(
+        for job: VideoJob,
+        filterCapabilities: FFmpegFilterCapabilities
+    ) -> ToneMappingPipeline? {
+        guard job.options.enableHDRToSDR else { return nil }
+        guard toneMappingSupportError(for: job, filterCapabilities: filterCapabilities) == nil else { return nil }
+
+        if filterCapabilities.supportsLibplacebo {
+            return .libplacebo
+        }
+
+        if filterCapabilities.supportsZscale {
+            return .zscale
+        }
+
+        return nil
+    }
+
+    private static func libplaceboToneMappingFilter(for options: ConversionOptions) -> String {
+        "libplacebo=tonemapping=\(libplaceboToneMapMode(for: options.toneMapMode)):peak_detect=true:colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv:format=yuv420p"
+    }
+
+    private static func libplaceboToneMapMode(for mode: ToneMapMode) -> String {
+        switch mode {
+        case .hable:
+            return "hable"
+        case .reinhard:
+            // BT.2390 produces a brighter, more standard SDR result than raw Hable in libplacebo.
+            return "bt.2390"
+        }
+    }
+
+    private static func zscaleToneMapMode(for mode: ToneMapMode) -> String {
+        switch mode {
+        case .hable:
+            return "hable"
+        case .reinhard:
+            return "reinhard"
+        }
+    }
+
+    private static func resolvedToneMapNominalPeak(for options: ConversionOptions) -> Double {
+        // Older builds stored 1000 as a source-style HDR peak. Clamp legacy values back to an SDR-ish nominal peak.
+        if options.toneMapPeak > 300 {
+            return 100
+        }
+        return max(48, min(options.toneMapPeak, 203))
     }
 
     private static func resolveBaseFolder(for job: VideoJob, settings: AppSettings) -> URL {

@@ -42,6 +42,7 @@ struct VideoJob: Identifiable, Codable, Equatable {
     var status: JobStatus
     var progress: Double
     var estimatedRemainingSeconds: Double?
+    var currentFramesPerSecond: Double?
     var metadata: MediaMetadata?
     var inputFileSizeBytes: Int64?
     var estimatedOutputSizeBytes: Int64?
@@ -71,6 +72,7 @@ struct VideoJob: Identifiable, Codable, Equatable {
         self.status = .queued
         self.progress = 0
         self.estimatedRemainingSeconds = nil
+        self.currentFramesPerSecond = nil
         self.metadata = nil
         self.inputFileSizeBytes = nil
         self.estimatedOutputSizeBytes = nil

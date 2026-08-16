@@ -13,9 +13,14 @@ enum FileSizeFormatterUtil {
         guard let sourceBytes, sourceBytes > 0 else {
             return "Output: \(renderedOutput)"
         }
-        let delta = outputBytes - sourceBytes
-        let renderedDelta = string(from: abs(delta))
-        let sign = delta <= 0 ? "-" : "+"
-        return "Output: \(renderedOutput) (\(sign)\(renderedDelta))"
+        let relativePercent = (Double(outputBytes) / Double(sourceBytes)) * 100
+        return "Output: \(renderedOutput) (\(relativePercentString(relativePercent)) of input)"
+    }
+
+    private static func relativePercentString(_ value: Double) -> String {
+        if value < 10 {
+            return String(format: "%.1f%%", locale: Locale(identifier: "en_US_POSIX"), value)
+        }
+        return String(format: "%.0f%%", locale: Locale(identifier: "en_US_POSIX"), value)
     }
 }

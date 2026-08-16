@@ -6,6 +6,7 @@ enum SidebarFocusTarget: Hashable {
     case morePresets
     case chooseDefaultOutputFolder
     case resetDefaultOutputFolder
+    case revealDefaultOutputFolder
     case chooseOutputFolderForSelection
     case allowOverwrite
     case startConversion
@@ -34,6 +35,7 @@ enum SidebarFocusTarget: Hashable {
     case externalAudioClear
     case externalAudioRemove(UUID)
     case hdrEnable
+    case hdrToneMappingEngine
     case hdrToneMap
     case renameTogglePill
     case advancedTogglePill
@@ -62,6 +64,7 @@ enum SidebarFocusTarget: Hashable {
         case .morePresets: return "focus.presets.more"
         case .chooseDefaultOutputFolder: return "focus.defaults.output"
         case .resetDefaultOutputFolder: return "focus.defaults.output.reset"
+        case .revealDefaultOutputFolder: return "focus.defaults.output.reveal"
         case .chooseOutputFolderForSelection: return "focus.defaults.selectionOutput"
         case .allowOverwrite: return "focus.defaults.overwrite"
         case .startConversion: return "focus.defaults.start"
@@ -90,6 +93,7 @@ enum SidebarFocusTarget: Hashable {
         case .externalAudioClear: return "focus.moreSettings.externalAudio.clear"
         case let .externalAudioRemove(id): return "focus.moreSettings.externalAudio.remove.\(id.uuidString)"
         case .hdrEnable: return "focus.hdr.enable"
+        case .hdrToneMappingEngine: return "focus.hdr.engine"
         case .hdrToneMap: return "focus.hdr.tonemap"
         case .renameTogglePill: return "focus.rename.togglePill"
         case .advancedTogglePill: return "focus.advanced.togglePill"

@@ -39,18 +39,18 @@ enum FFprobeService {
         process.standardOutput = output
         process.standardError = error
 
-        try process.run()
-        process.waitUntilExit()
+        let result = try await run(
+            process: process,
+            outputHandle: output.fileHandleForReading,
+            errorHandle: error.fileHandleForReading
+        )
 
-        let stdout = output.fileHandleForReading.readDataToEndOfFile()
-        let stderr = error.fileHandleForReading.readDataToEndOfFile()
-
-        guard process.terminationStatus == 0 else {
-            let message = String(data: stderr, encoding: .utf8) ?? "FFprobe exited with \(process.terminationStatus)."
+        guard result.status == 0 else {
+            let message = String(data: result.stderr, encoding: .utf8) ?? "FFprobe exited with \(result.status)."
             throw FFprobeError.failed(message)
         }
 
-        return try parse(jsonData: stdout)
+        return try parse(jsonData: result.stdout)
     }
 
     static func parse(jsonData: Data) throws -> MediaMetadata {
@@ -62,5 +62,59 @@ enum FFprobeService {
             streams: payload.streams,
             chapters: payload.chapters ?? []
         )
+    }
+
+    private static func run(
+        process: Process,
+        outputHandle: FileHandle,
+        errorHandle: FileHandle
+    ) async throws -> (stdout: Data, stderr: Data, status: Int32) {
+        let stdout = FFprobeDataBuffer()
+        let stderr = FFprobeDataBuffer()
+
+        outputHandle.readabilityHandler = { handle in
+            let data = handle.availableData
+            if !data.isEmpty { stdout.append(data) }
+        }
+        errorHandle.readabilityHandler = { handle in
+            let data = handle.availableData
+            if !data.isEmpty { stderr.append(data) }
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            process.terminationHandler = { finishedProcess in
+                outputHandle.readabilityHandler = nil
+                errorHandle.readabilityHandler = nil
+                stdout.append(outputHandle.readDataToEndOfFile())
+                stderr.append(errorHandle.readDataToEndOfFile())
+                continuation.resume(returning: (stdout.data, stderr.data, finishedProcess.terminationStatus))
+            }
+
+            do {
+                try process.run()
+            } catch {
+                outputHandle.readabilityHandler = nil
+                errorHandle.readabilityHandler = nil
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+}
+
+private final class FFprobeDataBuffer {
+    private let lock = NSLock()
+    private var storage = Data()
+
+    var data: Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func append(_ data: Data) {
+        guard !data.isEmpty else { return }
+        lock.lock()
+        storage.append(data)
+        lock.unlock()
     }
 }

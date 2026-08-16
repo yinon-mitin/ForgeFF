@@ -18,8 +18,14 @@ enum QueueRunState: String, Equatable {
     case cancelling
 }
 
+enum QueueRunScopeMode: Equatable {
+    case fullQueue
+    case selection
+}
+
 struct QueueExecutionState: Equatable {
     var runnerState: QueueRunState = .idle
+    var scopeMode: QueueRunScopeMode = .fullQueue
     var scopeJobIDs = Set<UUID>()
     var activeJobID: UUID?
     var pausedJobID: UUID?
@@ -75,6 +81,7 @@ final class JobQueueStore: ObservableObject {
     private let settingsStore: SettingsStore
     private let historyStore: HistoryStore
     private let runner = FFmpegRunner()
+    private let avconvertRunner = AVConvertRunner()
     private let sourceBookmarkStore = SecurityScopedBookmarkStore()
     private let outputBookmarkStore = SecurityScopedBookmarkStore()
     private var queueTask: Task<Void, Never>?
@@ -113,6 +120,10 @@ final class JobQueueStore: ObservableObject {
 
     var isQueuePaused: Bool {
         executionState.runnerState == .paused
+    }
+
+    var acceptsLiveQueueAdditions: Bool {
+        executionState.runnerState == .running || executionState.runnerState == .paused
     }
 
     var canPause: Bool {
@@ -220,6 +231,7 @@ final class JobQueueStore: ObservableObject {
             refreshDerivedNaming(for: &job)
             jobs.append(job)
             sourceBookmarkStore.store(url: url, for: job.id)
+            admitNewJobIntoActiveScopeIfNeeded(jobID: job.id)
             selectedJobID = job.id
             Task {
                 await analyzeMetadata(for: job.id)
@@ -248,7 +260,7 @@ final class JobQueueStore: ObservableObject {
 
         if removingActiveJob || (removingPausedJob && executionState.runnerState == .paused) {
             invalidateProcessingSession()
-            runner.cancel(force: removingPausedJob && executionState.runnerState == .paused)
+            cancelActiveProcesses(force: removingPausedJob && executionState.runnerState == .paused)
             setRunnerState(.idle)
             pauseElapsedTracking()
         }
@@ -362,12 +374,16 @@ final class JobQueueStore: ObservableObject {
             alertMessage = subtitleError
             return
         }
+        if let toneMappingError = firstUnsupportedToneMappingError(in: scopeJobIDs) {
+            alertMessage = toneMappingError
+            return
+        }
 
         if executionState.runnerState == .paused,
            let pausedJobID = executionState.pausedJobID,
            scopeJobIDs.contains(pausedJobID),
            jobStatus(for: pausedJobID) == .paused {
-            resumePausedJob(pausedJobID, in: scopeJobIDs)
+            resumePausedJob(pausedJobID, in: scopeJobIDs, scopeMode: selectedJobIDs.isEmpty ? .fullQueue : .selection)
             return
         }
 
@@ -375,7 +391,10 @@ final class JobQueueStore: ObservableObject {
             abandonPausedExecutionForNewScope()
         }
 
-        beginProcessing(scopeJobIDs: scopeJobIDs)
+        beginProcessing(
+            scopeJobIDs: scopeJobIDs,
+            scopeMode: selectedJobIDs.isEmpty ? .fullQueue : .selection
+        )
     }
 
     func startQueue(selectedJobIDs: Set<UUID> = []) {
@@ -391,22 +410,23 @@ final class JobQueueStore: ObservableObject {
         }
 
         jobs[index].status = .paused
-        runner.pause()
+        pauseActiveProcesses()
         executionState.pausedJobID = activeJobID
         executionState.activeJobID = nil
         setRunnerState(.paused)
         pauseElapsedTracking()
     }
 
-    private func resumePausedJob(_ jobID: UUID, in scopeJobIDs: Set<UUID>) {
+    private func resumePausedJob(_ jobID: UUID, in scopeJobIDs: Set<UUID>, scopeMode: QueueRunScopeMode) {
         guard let index = jobs.firstIndex(where: { $0.id == jobID && $0.status == .paused }) else { return }
 
+        executionState.scopeMode = scopeMode
         executionState.scopeJobIDs = scopeJobIDs
         executionState.activeJobID = jobID
         executionState.pausedJobID = nil
         activeProgressJobIDs = scopeJobIDs
         jobs[index].status = .running
-        runner.resume()
+        resumeActiveProcesses()
         setRunnerState(.running)
         elapsedTracker.startOrResume(at: Date())
         queueElapsedSeconds = elapsedTracker.elapsed(at: Date())
@@ -456,7 +476,7 @@ final class JobQueueStore: ObservableObject {
             }
         }
 
-        runner.cancel(force: forceCancel)
+        cancelActiveProcesses(force: forceCancel)
     }
 
     private func cancelSelectedJobs(_ jobIDs: Set<UUID>) {
@@ -473,7 +493,7 @@ final class JobQueueStore: ObservableObject {
             case .running:
                 markCancelled(at: index)
                 executionState.scopeJobIDs.remove(jobs[index].id)
-                runner.cancel()
+                cancelActiveProcesses()
             default:
                 break
             }
@@ -481,7 +501,7 @@ final class JobQueueStore: ObservableObject {
 
         if executionState.runnerState == .paused, executionState.pausedJobID == nil {
             invalidateProcessingSession()
-            runner.cancel(force: true)
+            cancelActiveProcesses(force: true)
             setRunnerState(.idle)
             pauseElapsedTracking()
         }
@@ -491,7 +511,7 @@ final class JobQueueStore: ObservableObject {
 
     func cancel(jobID: UUID) {
         if executionState.activeJobID == jobID, jobs.first(where: { $0.id == jobID && $0.status == .running }) != nil {
-            runner.cancel()
+            cancelActiveProcesses()
             return
         }
 
@@ -502,7 +522,7 @@ final class JobQueueStore: ObservableObject {
             executionState.scopeJobIDs.remove(jobID)
             executionState.pausedJobID = nil
             invalidateProcessingSession()
-            runner.cancel(force: true)
+            cancelActiveProcesses(force: true)
             setRunnerState(.idle)
             pauseElapsedTracking()
             return
@@ -521,6 +541,7 @@ final class JobQueueStore: ObservableObject {
         guard let index = jobs.firstIndex(where: { $0.id == jobID }) else { return }
         jobs[index].status = .ready
         jobs[index].progress = 0
+        jobs[index].currentFramesPerSecond = nil
         jobs[index].errorMessage = nil
         jobs[index].errorDetails = nil
         jobs[index].commandLine = nil
@@ -823,6 +844,7 @@ final class JobQueueStore: ObservableObject {
             jobs[refreshedIndex].metadata = metadata
             jobs[refreshedIndex].status = .ready
             refreshDerivedNaming(for: &jobs[refreshedIndex])
+            admitNewJobIntoActiveScopeIfNeeded(jobID: jobID)
         } catch {
             guard let refreshedIndex = jobs.firstIndex(where: { $0.id == jobID }) else { return }
             jobs[refreshedIndex].status = .failed
@@ -833,11 +855,14 @@ final class JobQueueStore: ObservableObject {
 
     private func processPendingJobs(sessionID: UUID) async {
         while isActiveSession(sessionID) {
-            guard let nextIndex = nextRunnableJobIndex(in: executionState.scopeJobIDs) else {
+            if let nextIndex = nextRunnableJobIndex(in: executionState.scopeJobIDs) {
+                await runJob(at: nextIndex, sessionID: sessionID)
+            } else if hasJobsAwaitingAnalysis(in: executionState.scopeJobIDs) {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                continue
+            } else {
                 break
             }
-
-            await runJob(at: nextIndex, sessionID: sessionID)
 
             if Task.isCancelled || !isActiveSession(sessionID) || executionState.runnerState == .idle {
                 break
@@ -858,6 +883,7 @@ final class JobQueueStore: ObservableObject {
 
         jobs[index].status = .running
         jobs[index].startedAt = Date()
+        jobs[index].currentFramesPerSecond = nil
         jobs[index].completedAt = nil
         jobs[index].errorMessage = nil
         jobs[index].errorDetails = nil
@@ -869,11 +895,14 @@ final class JobQueueStore: ObservableObject {
             outputFilename: jobs[index].outputFilename
         )
         setRunnerState(.running)
+        runner.clearResolvedVersion()
+        var commandTrace: String?
 
         do {
             let appSettings = settingsStore.settings
             let ffmpegURL = settingsStore.ffmpegURL
             let capabilities = settingsStore.encoderCapabilities
+            let filterCapabilities = settingsStore.filterCapabilities
             let sourceURL = jobs[index].sourceURL
             let result = try await withAccessibleSourceURL(for: jobID, fallbackURL: sourceURL) { accessibleSourceURL in
                 var runnableJob = jobs[index]
@@ -886,13 +915,30 @@ final class JobQueueStore: ObservableObject {
                 return try await withAccessibleOutputDirectory(for: runnableJob) { accessibleOutputDirectory in
                     runnableJob.outputDirectory = accessibleOutputDirectory
                     return try await withAccessibleAncillaryURLs(for: runnableJob) {
+                        if shouldUseAVConvertToneMapping(for: runnableJob) {
+                            let avResult = try await runAVConvertToneMappingPipeline(
+                                job: runnableJob,
+                                ffmpegURL: ffmpegURL,
+                                settings: appSettings,
+                                capabilities: capabilities,
+                                filterCapabilities: filterCapabilities,
+                                jobID: jobID,
+                                sessionID: sessionID
+                            )
+                            commandTrace = avResult.commandLine
+                            jobs[index].commandLine = avResult.commandLine
+                            return avResult.summary
+                        }
+
                         if let ffmpegURL {
                             if let invocation = try? FFmpegCommandBuilder.buildInvocation(
                                 for: runnableJob,
                                 ffmpegURL: ffmpegURL,
                                 settings: appSettings,
-                                capabilities: capabilities
+                                capabilities: capabilities,
+                                filterCapabilities: filterCapabilities
                             ) {
+                                commandTrace = invocation.commandLine
                                 jobs[index].commandLine = invocation.commandLine
                             } else {
                                 jobs[index].commandLine = nil
@@ -903,7 +949,8 @@ final class JobQueueStore: ObservableObject {
                             job: runnableJob,
                             ffmpegURL: ffmpegURL,
                             settings: appSettings,
-                            capabilities: capabilities
+                            capabilities: capabilities,
+                            filterCapabilities: filterCapabilities
                         ) { [weak self] progress in
                             self?.applyProgress(progress, to: jobID, sessionID: sessionID)
                         }
@@ -918,12 +965,16 @@ final class JobQueueStore: ObservableObject {
                let outputURL = completedResult.outputURL {
                 completedResult.outputFileSize = readFileSize(at: outputURL)
             }
+            let completionDate = Date()
+            if let startedAt = jobs[refreshedIndex].startedAt {
+                completedResult.elapsedSeconds = max(0, completionDate.timeIntervalSince(startedAt))
+            }
             jobs[refreshedIndex].status = .completed
             jobs[refreshedIndex].progress = 1
             jobs[refreshedIndex].estimatedRemainingSeconds = 0
             jobs[refreshedIndex].result = completedResult
             jobs[refreshedIndex].ffmpegVersion = runner.lastResolvedVersion
-            jobs[refreshedIndex].completedAt = Date()
+            jobs[refreshedIndex].completedAt = completionDate
             historyStore.append(job: jobs[refreshedIndex])
         } catch {
             guard isActiveSession(sessionID),
@@ -936,11 +987,15 @@ final class JobQueueStore: ObservableObject {
             if let runnerError = error as? FFmpegRunnerError {
                 jobs[refreshedIndex].errorMessage = runnerError.errorDescription
                 jobs[refreshedIndex].errorDetails = runnerError.details
-                jobs[refreshedIndex].commandLine = runnerError.commandLine
+                jobs[refreshedIndex].commandLine = commandTrace ?? runnerError.commandLine
+            } else if let avconvertError = error as? AVConvertRunnerError {
+                jobs[refreshedIndex].errorMessage = avconvertError.errorDescription
+                jobs[refreshedIndex].errorDetails = avconvertError.details
+                jobs[refreshedIndex].commandLine = commandTrace ?? avconvertError.commandLine
             } else {
                 jobs[refreshedIndex].errorMessage = error.localizedDescription
                 jobs[refreshedIndex].errorDetails = error.localizedDescription
-                jobs[refreshedIndex].commandLine = nil
+                jobs[refreshedIndex].commandLine = commandTrace
             }
             jobs[refreshedIndex].ffmpegVersion = runner.lastResolvedVersion
             jobs[refreshedIndex].completedAt = Date()
@@ -957,8 +1012,29 @@ final class JobQueueStore: ObservableObject {
     private func applyProgress(_ progress: FFmpegProgress, to jobID: UUID, sessionID: UUID) {
         guard isActiveSession(sessionID),
               let index = jobs.firstIndex(where: { $0.id == jobID }) else { return }
-        jobs[index].progress = progress.ratio
-        jobs[index].estimatedRemainingSeconds = progress.etaSeconds
+        let monotonicRatio = max(jobs[index].progress, min(max(progress.ratio, 0), 1))
+        let didAdvance = monotonicRatio > jobs[index].progress
+        jobs[index].progress = monotonicRatio
+        if let framesPerSecond = progress.framesPerSecond, framesPerSecond >= 0 {
+            jobs[index].currentFramesPerSecond = framesPerSecond
+        }
+        if didAdvance, let etaSeconds = progress.etaSeconds {
+            jobs[index].estimatedRemainingSeconds = etaSeconds
+        }
+        if let observedOutputBytes = progress.outputBytes,
+           let duration = jobs[index].metadata?.durationSeconds,
+           duration > 0,
+           let refinedEstimate = OutputSizeEstimator.refinedEstimate(
+               observedOutputBytes: observedOutputBytes,
+               encodedRatio: progress.encodedSeconds / duration,
+               previousEstimate: jobs[index].estimatedOutputSizeBytes
+           ) {
+            jobs[index].estimatedOutputSizeBytes = refinedEstimate
+            jobs[index].estimatedOutputDeltaPercent = OutputSizeEstimator.deltaPercent(
+                outputBytes: refinedEstimate,
+                sourceBytes: jobs[index].inputFileSizeBytes ?? jobs[index].metadata?.fileSizeBytes
+            )
+        }
         if jobs[index].result == nil {
             jobs[index].result = JobResultSummary(
                 outputURL: nil,
@@ -967,8 +1043,110 @@ final class JobQueueStore: ObservableObject {
                 averageSpeed: progress.speed
             )
         } else {
-            jobs[index].result?.averageSpeed = progress.speed
+            if let speed = progress.speed {
+                jobs[index].result?.averageSpeed = speed
+            }
         }
+    }
+
+    private func applyAVConvertProgress(_ ratio: Double?, to jobID: UUID, sessionID: UUID) {
+        guard isActiveSession(sessionID),
+              let index = jobs.firstIndex(where: { $0.id == jobID }) else { return }
+        let stagedRatio = ratio.map { min(max(0.05 + ($0 * 0.35), 0.05), 0.4) } ?? 0.08
+        jobs[index].progress = max(jobs[index].progress, stagedRatio)
+        jobs[index].estimatedRemainingSeconds = nil
+        jobs[index].currentFramesPerSecond = nil
+    }
+
+    private func shouldUseAVConvertToneMapping(for job: VideoJob) -> Bool {
+        job.options.enableHDRToSDR &&
+        !job.options.isCustomCommandEnabled &&
+        job.metadata?.isHDR == true &&
+        settingsStore.preferredToneMappingBackend == .appleAVConvert
+    }
+
+    private func runAVConvertToneMappingPipeline(
+        job: VideoJob,
+        ffmpegURL: URL?,
+        settings: AppSettings,
+        capabilities: FFmpegEncoderCapabilities,
+        filterCapabilities: FFmpegFilterCapabilities,
+        jobID: UUID,
+        sessionID: UUID
+    ) async throws -> (summary: JobResultSummary, commandLine: String) {
+        guard let ffmpegURL else {
+            throw FFmpegRunnerError.missingBinary
+        }
+        guard let avconvertURL = settingsStore.avconvertCapabilities.executableURL else {
+            throw AVConvertRunnerError.unavailable
+        }
+
+        let intermediateURL = makeToneMappedIntermediateURL(for: job)
+        try FileManager.default.createDirectory(
+            at: intermediateURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        defer { try? FileManager.default.removeItem(at: intermediateURL) }
+
+        let preset = AVConvertPreset.bestMatch(for: job.metadata)
+        let avInvocation = try avconvertRunner.buildInvocation(
+            sourceURL: job.sourceURL,
+            outputURL: intermediateURL,
+            preset: preset,
+            replaceExisting: true,
+            executableURL: avconvertURL
+        )
+
+        var finalJob = job
+        finalJob.sourceURL = intermediateURL
+        finalJob.outputDirectory = job.outputDirectory ?? job.sourceURL.deletingLastPathComponent()
+        finalJob.options.enableHDRToSDR = false
+
+        let ffmpegInvocation = try FFmpegCommandBuilder.buildInvocation(
+            for: finalJob,
+            ffmpegURL: ffmpegURL,
+            settings: settings,
+            capabilities: capabilities,
+            filterCapabilities: filterCapabilities,
+            sourceLayout: .toneMappedIntermediate(
+                videoSourceURL: intermediateURL,
+                originalMediaSourceURL: job.sourceURL
+            )
+        )
+
+        let combinedCommandLine = [
+            "# Apple tone mapping",
+            avInvocation.commandLine,
+            "",
+            "# Final FFmpeg pass",
+            ffmpegInvocation.commandLine
+        ].joined(separator: "\n")
+
+        applyAVConvertProgress(nil, to: jobID, sessionID: sessionID)
+        _ = try await avconvertRunner.run(invocation: avInvocation) { [weak self] ratio in
+            self?.applyAVConvertProgress(ratio, to: jobID, sessionID: sessionID)
+        }
+
+        let outputURL = FFmpegCommandBuilder.outputURL(for: finalJob, settings: settings)
+        let summary = try await runner.run(
+            invocation: ffmpegInvocation,
+            outputURL: outputURL,
+            totalDuration: job.metadata?.durationSeconds
+        ) { [weak self] progress in
+            var stagedProgress = progress
+            stagedProgress.ratio = min(max(0.4 + (progress.ratio * 0.6), 0.4), 1)
+            self?.applyProgress(stagedProgress, to: jobID, sessionID: sessionID)
+        }
+
+        return (summary: summary, commandLine: combinedCommandLine)
+    }
+
+    private func makeToneMappedIntermediateURL(for job: VideoJob) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("forgeff-tonemap-\(job.id.uuidString)", isDirectory: true)
+            .appendingPathComponent(job.sourceURL.deletingPathExtension().lastPathComponent)
+            .appendingPathExtension("mp4")
     }
 
     private func refreshDerivedNaming(for job: inout VideoJob) {
@@ -1046,6 +1224,32 @@ final class JobQueueStore: ObservableObject {
         return nil
     }
 
+    private func firstUnsupportedToneMappingError(in scopeJobIDs: Set<UUID>) -> String? {
+        let toneMapJobs = jobs.filter {
+            scopeJobIDs.contains($0.id) &&
+            $0.options.enableHDRToSDR &&
+            !$0.options.isCustomCommandEnabled &&
+            $0.metadata?.isHDR == true
+        }
+        guard !toneMapJobs.isEmpty else { return nil }
+
+        if settingsStore.preferredToneMappingBackend == .appleAVConvert {
+            return nil
+        }
+
+        guard settingsStore.preferredToneMappingBackend == .ffmpegFilters else {
+            return "HDR tone mapping requires Apple VideoToolbox or an FFmpeg build with libplacebo or zscale."
+        }
+
+        let filterCapabilities = settingsStore.ensureFilterCapabilitiesDetected()
+        for job in toneMapJobs {
+            if let error = FFmpegCommandBuilder.toneMappingSupportError(for: job, filterCapabilities: filterCapabilities) {
+                return error
+            }
+        }
+        return nil
+    }
+
     private func mergedUniqueSubtitleAttachments(
         existing: [SubtitleAttachment],
         newAttachments: [SubtitleAttachment]
@@ -1109,7 +1313,7 @@ final class JobQueueStore: ObservableObject {
     private func resetQueueRuntimeState() {
         let forceCancel = executionState.runnerState == .paused
         invalidateProcessingSession()
-        runner.cancel(force: forceCancel)
+        cancelActiveProcesses(force: forceCancel)
         executionState = QueueExecutionState()
         activeProgressJobIDs.removeAll()
         queueState = .idle
@@ -1141,6 +1345,7 @@ final class JobQueueStore: ObservableObject {
         case .running:
             if executionState.activeJobID == nil && !hasRunningJobs {
                 setRunnerState(.idle)
+                executionState.scopeMode = .fullQueue
                 executionState.scopeJobIDs.removeAll()
                 activeProgressJobIDs.removeAll()
                 pauseElapsedTracking()
@@ -1149,6 +1354,7 @@ final class JobQueueStore: ObservableObject {
             if executionState.pausedJobID == nil && !hasPausedJobs {
                 invalidateProcessingSession()
                 setRunnerState(.idle)
+                executionState.scopeMode = .fullQueue
                 executionState.scopeJobIDs.removeAll()
                 activeProgressJobIDs.removeAll()
                 pauseElapsedTracking()
@@ -1156,6 +1362,7 @@ final class JobQueueStore: ObservableObject {
         case .cancelling:
             if !hasRunningJobs && !hasPausedJobs {
                 setRunnerState(.idle)
+                executionState.scopeMode = .fullQueue
                 executionState.scopeJobIDs.removeAll()
                 activeProgressJobIDs.removeAll()
                 pauseElapsedTracking()
@@ -1200,10 +1407,11 @@ final class JobQueueStore: ObservableObject {
         return jobs.firstIndex(where: { scopeJobIDs.contains($0.id) && isRunnableStatus($0.status) })
     }
 
-    private func beginProcessing(scopeJobIDs: Set<UUID>) {
+    private func beginProcessing(scopeJobIDs: Set<UUID>, scopeMode: QueueRunScopeMode) {
         let sessionID = UUID()
 
         prepareJobsForFreshRun(scopeJobIDs: scopeJobIDs)
+        executionState.scopeMode = scopeMode
         executionState.scopeJobIDs = scopeJobIDs
         executionState.activeJobID = nextRunnableJobIndex(in: scopeJobIDs).map { jobs[$0].id }
         activeProgressJobIDs = scopeJobIDs
@@ -1221,7 +1429,8 @@ final class JobQueueStore: ObservableObject {
     private func abandonPausedExecutionForNewScope() {
         guard executionState.runnerState == .paused else { return }
         invalidateProcessingSession()
-        runner.cancel(force: true)
+        cancelActiveProcesses(force: true)
+        executionState.scopeMode = .fullQueue
         executionState.scopeJobIDs.removeAll()
         executionState.activeJobID = nil
         activeProgressJobIDs.removeAll()
@@ -1242,6 +1451,7 @@ final class JobQueueStore: ObservableObject {
         jobs[index].status = .ready
         jobs[index].progress = 0
         jobs[index].estimatedRemainingSeconds = nil
+        jobs[index].currentFramesPerSecond = nil
         jobs[index].errorMessage = nil
         jobs[index].errorDetails = nil
         jobs[index].commandLine = nil
@@ -1259,6 +1469,7 @@ final class JobQueueStore: ObservableObject {
         jobs[index].status = .ready
         jobs[index].progress = 0
         jobs[index].estimatedRemainingSeconds = nil
+        jobs[index].currentFramesPerSecond = nil
         jobs[index].errorMessage = nil
         jobs[index].errorDetails = nil
         jobs[index].commandLine = nil
@@ -1301,6 +1512,7 @@ final class JobQueueStore: ObservableObject {
         activeProcessingSessionID = nil
         queueTask = nil
         executionState.activeJobID = nil
+        executionState.scopeMode = .fullQueue
         executionState.scopeJobIDs.removeAll()
         activeProgressJobIDs.removeAll()
         if executionState.runnerState != .paused {
@@ -1322,6 +1534,34 @@ final class JobQueueStore: ObservableObject {
     private func setRunnerState(_ state: QueueRunState) {
         executionState.runnerState = state
         queueState = state
+    }
+
+    private func pauseActiveProcesses() {
+        runner.pause()
+        avconvertRunner.pause()
+    }
+
+    private func resumeActiveProcesses() {
+        runner.resume()
+        avconvertRunner.resume()
+    }
+
+    private func cancelActiveProcesses(force: Bool = false) {
+        runner.cancel(force: force)
+        avconvertRunner.cancel(force: force)
+    }
+
+    private func admitNewJobIntoActiveScopeIfNeeded(jobID: UUID) {
+        guard executionState.runnerState == .running || executionState.runnerState == .paused else { return }
+
+        executionState.scopeJobIDs.insert(jobID)
+        activeProgressJobIDs.insert(jobID)
+    }
+
+    private func hasJobsAwaitingAnalysis(in scopeJobIDs: Set<UUID>) -> Bool {
+        jobs.contains { job in
+            scopeJobIDs.contains(job.id) && (job.status == .analyzing || job.status == .queued)
+        }
     }
 
     private func pauseElapsedTracking() {
@@ -1419,12 +1659,14 @@ extension JobQueueStore {
 
     func _debugSetExecutionState(
         _ state: QueueRunState,
+        scopeMode: QueueRunScopeMode = .fullQueue,
         scopeJobIDs: Set<UUID> = [],
         activeJobID: UUID? = nil,
         pausedJobID: UUID? = nil
     ) {
         executionState = QueueExecutionState(
             runnerState: state,
+            scopeMode: scopeMode,
             scopeJobIDs: scopeJobIDs,
             activeJobID: activeJobID,
             pausedJobID: pausedJobID
@@ -1434,6 +1676,10 @@ extension JobQueueStore {
 
     func _debugExecutionState() -> QueueExecutionState {
         executionState
+    }
+
+    func _debugAdmitNewJobIntoActiveScope(jobID: UUID) {
+        admitNewJobIntoActiveScopeIfNeeded(jobID: jobID)
     }
 }
 
@@ -1483,10 +1729,7 @@ enum OutputSizeEstimator {
         let clampedBytes = max(Int64(0), bytes)
 
         let sourceSize = job.inputFileSizeBytes ?? job.metadata?.fileSizeBytes
-        let deltaPercent: Double? = {
-            guard let sourceSize, sourceSize > 0 else { return nil }
-            return (Double(clampedBytes - sourceSize) / Double(sourceSize)) * 100.0
-        }()
+        let deltaPercent = deltaPercent(outputBytes: clampedBytes, sourceBytes: sourceSize)
 
         return OutputSizeEstimate(outputBytes: clampedBytes, deltaPercent: deltaPercent)
     }
@@ -1494,6 +1737,31 @@ enum OutputSizeEstimator {
     static func estimateFromTotalBitrate(durationSeconds: Double, totalBitrateBitsPerSecond: Int) -> Int64? {
         guard durationSeconds > 0, totalBitrateBitsPerSecond > 0 else { return nil }
         return Int64((Double(totalBitrateBitsPerSecond) * durationSeconds) / 8.0)
+    }
+
+    static func refinedEstimate(
+        observedOutputBytes: Int64,
+        encodedRatio: Double,
+        previousEstimate: Int64?
+    ) -> Int64? {
+        guard observedOutputBytes > 0, encodedRatio >= 0.05, encodedRatio <= 1 else { return nil }
+
+        let containerReserve = encodedRatio < 0.98 ? 1.02 : 1.0
+        let projected = (Double(observedOutputBytes) / encodedRatio) * containerReserve
+        guard projected.isFinite, projected > 0 else { return nil }
+
+        guard let previousEstimate, previousEstimate > 0 else {
+            return Int64(projected)
+        }
+
+        let observedWeight = min(max(encodedRatio, 0.25), 0.85)
+        let blended = (Double(previousEstimate) * (1 - observedWeight)) + (projected * observedWeight)
+        return Int64(blended)
+    }
+
+    static func deltaPercent(outputBytes: Int64, sourceBytes: Int64?) -> Double? {
+        guard let sourceBytes, sourceBytes > 0 else { return nil }
+        return (Double(outputBytes - sourceBytes) / Double(sourceBytes)) * 100.0
     }
 
     private static func estimatedVideoBitrate(for job: VideoJob) -> Int {

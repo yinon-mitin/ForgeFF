@@ -14,6 +14,7 @@ struct AppSettings: Codable, Equatable {
     var lastSelectedPresetName: String?
     var lastUsedOptionsData: Data?
     var ffmpegHintMessages: [String]
+    var preferredToneMappingBackendRawValue: String?
 
     static let `default` = AppSettings(
         ffmpegBinaryPath: "",
@@ -26,7 +27,8 @@ struct AppSettings: Codable, Equatable {
         maxParallelJobs: 1,
         lastSelectedPresetName: ConversionPreset.builtIns.first?.name,
         lastUsedOptionsData: nil,
-        ffmpegHintMessages: []
+        ffmpegHintMessages: [],
+        preferredToneMappingBackendRawValue: nil
     )
 }
 
@@ -42,6 +44,8 @@ final class SettingsStore: ObservableObject {
 
     @Published var shouldShowFFmpegSetup = false
     @Published var encoderCapabilities: FFmpegEncoderCapabilities = .none
+    @Published var filterCapabilities: FFmpegFilterCapabilities = .unknown
+    @Published var avconvertCapabilities: AVConvertCapabilities = .unavailable
 
     init(pathDetector: FFmpegPathDetector = FFmpegPathDetector()) {
         self.pathDetector = pathDetector
@@ -53,6 +57,8 @@ final class SettingsStore: ObservableObject {
         }
 
         refreshBinaryDetection()
+        refreshAVConvertCapabilities()
+        normalizeToneMappingBackendSelection()
     }
 
     var ffmpegURL: URL? {
@@ -125,6 +131,13 @@ final class SettingsStore: ObservableObject {
         settings.defaultOutputDirectoryBookmark = nil
     }
 
+    @discardableResult
+    func revealDefaultOutputDirectory() -> Bool {
+        guard let url = defaultOutputDirectoryURL else { return false }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+        return true
+    }
+
     func saveLastUsed(options: ConversionOptions) {
         settings.lastSelectedPresetName = options.presetName
         settings.lastUsedOptionsData = try? JSONEncoder().encode(options)
@@ -153,6 +166,13 @@ final class SettingsStore: ObservableObject {
         settings.ffmpegHintMessages = result.hints
         shouldShowFFmpegSetup = !result.isConfigured
         refreshEncoderCapabilities()
+        refreshFilterCapabilities()
+        normalizeToneMappingBackendSelection()
+    }
+
+    func refreshAVConvertCapabilities() {
+        avconvertCapabilities = AVConvertDiscovery.detectCapabilities()
+        normalizeToneMappingBackendSelection()
     }
 
     func dismissFFmpegSetup() {
@@ -190,9 +210,105 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    func refreshFilterCapabilities() {
+        guard let ffmpegURL else {
+            filterCapabilities = .none
+            return
+        }
+
+        filterCapabilities = .unknown
+        Task.detached(priority: .utility) {
+            let detected = FFmpegFilterDiscovery.detectCapabilities(ffmpegURL: ffmpegURL)
+            await MainActor.run {
+                guard self.ffmpegURL == ffmpegURL else { return }
+                self.filterCapabilities = detected
+                self.normalizeToneMappingBackendSelection()
+            }
+        }
+    }
+
+    func ensureFilterCapabilitiesDetected() -> FFmpegFilterCapabilities {
+        if filterCapabilities.hasScanned {
+            return filterCapabilities
+        }
+
+        let detected = FFmpegFilterDiscovery.detectCapabilities(ffmpegURL: ffmpegURL)
+        filterCapabilities = detected
+        normalizeToneMappingBackendSelection()
+        return detected
+    }
+
+    var toneMappingBackendPreference: ToneMappingBackend {
+        get {
+            if let rawValue = settings.preferredToneMappingBackendRawValue,
+               let backend = ToneMappingBackend(rawValue: rawValue) {
+                return backend
+            }
+            return avconvertCapabilities.isAvailable ? .appleAVConvert : .ffmpegFilters
+        }
+        set {
+            settings.preferredToneMappingBackendRawValue = newValue.rawValue
+            normalizeToneMappingBackendSelection()
+        }
+    }
+
+    var ffmpegToneMappingBackendAvailable: Bool {
+        guard ffmpegURL != nil else { return false }
+        return !filterCapabilities.hasScanned || filterCapabilities.supportsToneMapping
+    }
+
+    var preferredToneMappingBackend: ToneMappingBackend? {
+        switch toneMappingBackendPreference {
+        case .appleAVConvert:
+            if avconvertCapabilities.isAvailable {
+                return .appleAVConvert
+            }
+            if ffmpegToneMappingBackendAvailable {
+                return .ffmpegFilters
+            }
+        case .ffmpegFilters:
+            if ffmpegToneMappingBackendAvailable {
+                return .ffmpegFilters
+            }
+            if avconvertCapabilities.isAvailable {
+                return .appleAVConvert
+            }
+        }
+        return nil
+    }
+
+    @discardableResult
+    func selectToneMappingBackend(_ backend: ToneMappingBackend) -> ToneMappingBackend {
+        settings.preferredToneMappingBackendRawValue = backend.rawValue
+        normalizeToneMappingBackendSelection()
+        return toneMappingBackendPreference
+    }
+
     private func save() {
         guard let data = try? JSONEncoder().encode(settings) else { return }
         defaults.set(data, forKey: settingsKey)
+    }
+
+    private func normalizeToneMappingBackendSelection() {
+        let normalized: ToneMappingBackend
+        switch toneMappingBackendPreference {
+        case .appleAVConvert:
+            if avconvertCapabilities.isAvailable || !ffmpegToneMappingBackendAvailable {
+                normalized = .appleAVConvert
+            } else {
+                normalized = .ffmpegFilters
+            }
+        case .ffmpegFilters:
+            if ffmpegToneMappingBackendAvailable || !avconvertCapabilities.isAvailable {
+                normalized = .ffmpegFilters
+            } else {
+                normalized = .appleAVConvert
+            }
+        }
+
+        if settings.preferredToneMappingBackendRawValue != normalized.rawValue {
+            settings.preferredToneMappingBackendRawValue = normalized.rawValue
+        }
     }
 
     private func isDirectory(_ url: URL) -> Bool {
