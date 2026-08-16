@@ -37,12 +37,6 @@ struct ForgeFFApp: App {
                 .environmentObject(dockProgressController)
         }
         .defaultSize(width: 1100, height: 700)
-        Window("About ForgeFF", id: "about-forgeff") {
-            AboutForgeFFView()
-                .frame(minWidth: 420, idealWidth: 460, minHeight: 280, idealHeight: 300)
-        }
-        .defaultSize(width: 460, height: 300)
-        .windowResizability(.contentMinSize)
         .commands {
             ForgeFFCommands(
                 queueStore: queueStore,
@@ -57,12 +51,11 @@ private struct ForgeFFCommands: Commands {
     @ObservedObject var queueStore: JobQueueStore
     @ObservedObject var viewModel: QueueViewModel
     let commandHandler: AppCommandHandler
-    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
             Button("About ForgeFF") {
-                openWindow(id: "about-forgeff")
+                commandHandler.triggerShowAbout()
             }
             .keyboardShortcut("/", modifiers: [.command])
         }

@@ -14,6 +14,7 @@ struct MainWindowView: View {
     @State private var isFileImporterPresented = false
     @State private var isDropTargeted = false
     @State private var isClearConfirmationPresented = false
+    @State private var isAboutPresented = false
     @State private var inspectedFailureJobID: UUID?
     @State private var splitViewVisibility: NavigationSplitViewVisibility = .all
     @State private var quickLookKeyMonitor: Any?
@@ -57,8 +58,8 @@ struct MainWindowView: View {
                         job: inspectedFailureJob,
                         onClose: { inspectedFailureJobID = nil },
                         onRetry: {
-                            queueStore.retry(jobID: inspectedFailureJob.id)
                             inspectedFailureJobID = nil
+                            queueStore.retry(jobID: inspectedFailureJob.id)
                             viewModel.refreshDraftOptions()
                         },
                         onOpenSource: { queueStore.openSource(for: inspectedFailureJob.id) },
@@ -68,9 +69,21 @@ struct MainWindowView: View {
                     .frame(minWidth: 300, idealWidth: 360, maxWidth: 480, maxHeight: .infinity)
                 }
             }
+            .id(inspectorLayoutIdentity)
             .background(Color(nsColor: .windowBackgroundColor))
         }
         .navigationSplitViewStyle(.balanced)
+        .overlay {
+            if isAboutPresented {
+                AboutForgeFFOverlay {
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        isAboutPresented = false
+                    }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                .zIndex(10)
+            }
+        }
         .toolbar {
             toolbarContent
         }
@@ -99,7 +112,6 @@ struct MainWindowView: View {
             FFmpegSetupView()
                 .environmentObject(settingsStore)
                 .frame(minWidth: 520, minHeight: 360)
-                .interactiveDismissDisabled(!settingsStore.hasRequiredBinaries)
         }
         .alert("ForgeFF", isPresented: Binding(
             get: { queueStore.alertMessage != nil },
@@ -242,6 +254,11 @@ struct MainWindowView: View {
             queueStore.clearCompletedResults()
             reconcileSelectionAfterClear()
         }
+        commandHandler.onShowAbout = {
+            withAnimation(.easeOut(duration: 0.18)) {
+                isAboutPresented = true
+            }
+        }
     }
 
     private var inspectedFailureJob: VideoJob? {
@@ -251,6 +268,10 @@ struct MainWindowView: View {
             return nil
         }
         return job
+    }
+
+    private var inspectorLayoutIdentity: String {
+        inspectedFailureJob.map { "failure-\($0.id.uuidString)" } ?? "queue-only"
     }
 
     private func reconcileSelectionAfterClear() {
@@ -410,6 +431,7 @@ private final class QueueQuickLookController: NSObject, ObservableObject, @preco
 }
 
 private struct FFmpegSetupView: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var settingsStore: SettingsStore
 
     var body: some View {
@@ -464,10 +486,22 @@ private struct FFmpegSetupView: View {
             Spacer()
 
             HStack {
+                Button("Quit ForgeFF") {
+                    NSApp.terminate(nil)
+                }
+                .keyboardShortcut("q", modifiers: [.command])
+
+                Button("Close") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+
                 Spacer()
+
                 Button("Retry Detection") {
                     settingsStore.refreshBinaryDetection()
                 }
+                .keyboardShortcut(.defaultAction)
             }
         }
         .padding(24)

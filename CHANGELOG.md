@@ -3,6 +3,21 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.6.3] - 2026-08-17
+
+### Added
+
+- Failed and cancelled task inspectors can export a complete plain-text diagnostic report with an automatically generated safe filename.
+- Diagnostic reports can be copied directly, and an exported report file can be copied for attaching to an issue or message.
+- The FFmpeg setup screen now provides explicit Close and Quit ForgeFF actions, including a working `Command-Q` shortcut.
+- About ForgeFF now appears as a centered in-app card with a dimmed backdrop, author information, version/build details, and repository links.
+
+### Fixed
+
+- Retrying a task from the failure inspector now closes the inspector first and restores the queue to the full available width.
+- Closing the FFmpeg setup screen is no longer blocked when FFmpeg or FFprobe is missing, so the setup prompt cannot trap the application.
+- `Command-/` now opens the in-app About presentation instead of creating a separate utility window.
+
 ## [2.6.2] - 2026-08-17
 
 ### Added

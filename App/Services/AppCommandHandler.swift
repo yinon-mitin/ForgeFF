@@ -11,6 +11,7 @@ final class AppCommandHandler: ObservableObject {
     var onClearQueue: () -> Void = {}
     var onClearCompleted: () -> Void = {}
     var onToggleMoreSettings: () -> Void = {}
+    var onShowAbout: () -> Void = {}
 
     func triggerAddFiles() { onAddFiles() }
     func triggerAddFolder() { onAddFolder() }
@@ -21,4 +22,5 @@ final class AppCommandHandler: ObservableObject {
     func triggerClearQueue() { onClearQueue() }
     func triggerClearCompleted() { onClearCompleted() }
     func triggerToggleMoreSettings() { onToggleMoreSettings() }
+    func triggerShowAbout() { onShowAbout() }
 }

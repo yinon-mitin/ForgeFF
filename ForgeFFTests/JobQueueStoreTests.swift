@@ -570,4 +570,36 @@ final class JobQueueStoreTests: XCTestCase {
         XCTAssertEqual(attachments.map(\.languageCode), ["eng", "spa"])
     }
 
+    func testFailureDiagnosticReportGeneratesSafeFilenameAndCompleteContents() {
+        var job = VideoJob(sourceURL: URL(fileURLWithPath: "/tmp/Camera clip #1.MP4"))
+        job.status = .failed
+        job.errorMessage = "Encoder failed."
+        job.errorDetails = "Detailed FFmpeg output"
+        job.commandLine = "/opt/homebrew/bin/ffmpeg -i input.mp4 output.mp4"
+        job.ffmpegVersion = "ffmpeg version 8.1.2"
+        job.result = JobResultSummary(
+            outputURL: nil,
+            outputFileSize: nil,
+            elapsedSeconds: 12.5,
+            averageSpeed: 0.8,
+            encodedFrameCount: 250,
+            averageFramesPerSecond: 20
+        )
+
+        let report = FailureDiagnosticReport(
+            job: job,
+            generatedAt: Date(timeIntervalSince1970: 0),
+            appVersion: "2.6.3",
+            appBuild: "263"
+        )
+
+        XCTAssertEqual(report.suggestedFilename, "ForgeFF-Camera-clip-1-failed-19700101-000000.txt")
+        XCTAssertTrue(report.contents.contains("Application: ForgeFF 2.6.3 (263)"))
+        XCTAssertTrue(report.contents.contains("Status: Failed"))
+        XCTAssertTrue(report.contents.contains("Encoder failed."))
+        XCTAssertTrue(report.contents.contains("Detailed FFmpeg output"))
+        XCTAssertTrue(report.contents.contains("Average processing FPS: 20.00"))
+        XCTAssertTrue(report.contents.contains(job.commandLine ?? ""))
+    }
+
 }

@@ -83,6 +83,9 @@ struct QueueListView: View {
                 queueStore.openCompletedOutput(for: job.id)
             },
             onRetry: {
+                if inspectedFailureJobID == job.id {
+                    inspectedFailureJobID = nil
+                }
                 queueStore.retry(jobID: job.id)
                 viewModel.refreshDraftOptions()
             },
@@ -686,6 +689,9 @@ struct QueueFailureInspectorView: View {
     let onRevealOutput: () -> Void
     let onOpenOutputFolder: () -> Void
 
+    @State private var reportFeedback: String?
+    @State private var exportedReportURL: URL?
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
@@ -757,6 +763,32 @@ struct QueueFailureInspectorView: View {
                         }
                     }
 
+                    inspectorSection(title: "Diagnostic Report") {
+                        Text("Export a complete report with task settings, FFmpeg information, command, and error log.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        HStack(spacing: 10) {
+                            Button("Export Report…", action: exportReport)
+                            Button("Copy Report", action: copyReport)
+                        }
+
+                        if let exportedReportURL {
+                            Button("Copy Exported File") {
+                                copyExportedFile(exportedReportURL)
+                            }
+                            .buttonStyle(.link)
+                            .font(.caption)
+                        }
+
+                        if let reportFeedback {
+                            Text(reportFeedback)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+
                     Divider()
 
                     HStack(spacing: 10) {
@@ -802,6 +834,50 @@ struct QueueFailureInspectorView: View {
         }
         .buttonStyle(.link)
         .font(.caption)
+    }
+
+    private func makeReport() -> FailureDiagnosticReport {
+        FailureDiagnosticReport(
+            job: job,
+            appVersion: BuildIdentity.versionString,
+            appBuild: BuildIdentity.buildString
+        )
+    }
+
+    private func exportReport() {
+        let report = makeReport()
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = report.suggestedFilename
+        panel.prompt = "Export"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try report.contents.write(to: url, atomically: true, encoding: .utf8)
+            exportedReportURL = url
+            reportFeedback = "Saved as \(url.lastPathComponent)"
+        } catch {
+            exportedReportURL = nil
+            reportFeedback = "Could not export report: \(error.localizedDescription)"
+        }
+    }
+
+    private func copyReport() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(makeReport().contents, forType: .string)
+        reportFeedback = "Full diagnostic report copied."
+    }
+
+    private func copyExportedFile(_ url: URL) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        if pasteboard.writeObjects([url as NSURL]) {
+            reportFeedback = "Exported report file copied."
+        } else {
+            reportFeedback = "Could not copy the exported report file."
+        }
     }
 }
 

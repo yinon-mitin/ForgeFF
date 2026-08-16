@@ -29,6 +29,94 @@ struct JobResultSummary: Codable, Equatable {
     var averageFramesPerSecond: Double? = nil
 }
 
+struct FailureDiagnosticReport: Equatable {
+    let suggestedFilename: String
+    let contents: String
+
+    init(
+        job: VideoJob,
+        generatedAt: Date = Date(),
+        appVersion: String,
+        appBuild: String
+    ) {
+        let timestamp = Self.timestampFormatter.string(from: generatedAt)
+        let sourceStem = Self.sanitizedFilenameComponent(
+            job.sourceURL.deletingPathExtension().lastPathComponent
+        )
+        suggestedFilename = "ForgeFF-\(sourceStem)-\(job.status.rawValue)-\(timestamp).txt"
+
+        let options = job.effectiveOptionsForDisplay
+        let videoStream = job.metadata?.videoStream
+        let resolution = [videoStream?.width, videoStream?.height]
+            .compactMap { $0 }
+            .count == 2
+            ? "\(videoStream?.width ?? 0)x\(videoStream?.height ?? 0)"
+            : "Unknown"
+
+        var lines = [
+            "ForgeFF Conversion Diagnostic Report",
+            "Generated: \(Self.iso8601Formatter.string(from: generatedAt))",
+            "Application: ForgeFF \(appVersion) (\(appBuild))",
+            "Task ID: \(job.id.uuidString)",
+            "Status: \(job.status.rawValue.capitalized)",
+            "",
+            "Task",
+            "Source: \(job.sourceURL.path)",
+            "Output: \(job.result?.outputURL?.path ?? "Not created")",
+            "Preset: \(options.presetName)",
+            "Container: \(options.container.rawValue.uppercased())",
+            "Video codec: \(options.videoCodec.displayName)",
+            "Audio codec: \(options.audioCodec.displayName)",
+            "Resolution: \(resolution)",
+            "Source FPS: \(Self.decimalString(videoStream?.frameRateValue))",
+            "Dynamic range: \(job.metadata?.dynamicRangeDescription ?? "Unknown")",
+            "Input bytes: \(job.inputFileSizeBytes ?? job.metadata?.fileSizeBytes ?? 0)",
+            "Elapsed seconds: \(Self.decimalString(job.result?.elapsedSeconds))",
+            "Average processing FPS: \(Self.decimalString(job.result?.averageFramesPerSecond))",
+            "",
+            "Error Summary",
+            job.errorSummary ?? (job.status == .cancelled ? "The conversion was cancelled." : "Conversion failed."),
+            "",
+            "FFmpeg",
+            job.ffmpegVersion ?? "Unknown",
+            "",
+            "Executed Command",
+            job.commandLine ?? "Not available",
+            "",
+            "Error Log",
+            job.errorLog ?? "No details available."
+        ]
+        lines.append("")
+        contents = lines.joined(separator: "\n")
+    }
+
+    private static let timestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return formatter
+    }()
+
+    private static let iso8601Formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static func sanitizedFilenameComponent(_ value: String) -> String {
+        let sanitized = value
+            .replacingOccurrences(of: "[^A-Za-z0-9._-]+", with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: ".-_"))
+        return sanitized.isEmpty ? "conversion" : String(sanitized.prefix(80))
+    }
+
+    private static func decimalString(_ value: Double?) -> String {
+        guard let value else { return "Unknown" }
+        return String(format: "%.2f", value)
+    }
+}
+
 struct JobExecutionSnapshot: Codable, Equatable {
     var options: ConversionOptions
     var outputDirectory: URL?

@@ -40,7 +40,7 @@ ForgeFF requires:
 - macOS 13 or newer
 - FFmpeg and FFprobe available on the machine
 
-ForgeFF does not bundle FFmpeg. The app will auto-detect common install locations on launch and will prompt for manual selection if it cannot find the binaries.
+ForgeFF does not bundle FFmpeg. The app will auto-detect common install locations on launch and will prompt for manual selection if it cannot find the binaries. The setup prompt can be closed if you only want to inspect the app, and it always allows quitting ForgeFF with `Command-Q`.
 
 Install FFmpeg with Homebrew:
 
@@ -96,14 +96,14 @@ Download ForgeFF from GitHub Releases:
 - Use `Start` to process the whole queue or the current selection.
 - While conversion is running or paused, use the single `Add to Queue…` toolbar menu to append more files. Newly added media is analyzed in the background and then processed after the jobs already ahead of it.
 - The compact summary above the queue shows active and waiting counts plus live FPS without duplicating the full footer.
-- Pause, resume, cancel, retry failed jobs, or reveal completed outputs directly from the queue. `Details` opens failed and cancelled diagnostics in a separate right-side inspector without expanding the row.
+- Pause, resume, cancel, retry failed jobs, or reveal completed outputs directly from the queue. `Details` opens failed and cancelled diagnostics in a separate right-side inspector without expanding the row. The inspector can copy or export a complete plain-text diagnostic report with an automatically generated filename.
 - Use `Clear Finished` for completed, failed, and cancelled results; its menu also exposes a confirmed full-queue clear.
 - Completed rows show actual conversion time and the output size as a percentage of the original input size.
 - Output-size estimates start from the selected codec and quality settings, then become more accurate during conversion by using the bytes FFmpeg has actually written and the encoded duration.
 - Running queue rows show FFmpeg's current processing speed in frames per second.
 - Terminal queue rows show the average processing FPS calculated from the encoded frame count and total task time; the value is also included in JSON history and CSV exports.
 - `Efficient HEVC` keeps the Telegram preset's source resolution, FPS, quality, AAC stereo, and streaming-friendly MP4 settings while using HEVC for a smaller file.
-- Press `Command-/` to open About ForgeFF, or `Command-,` to toggle More Settings.
+- Press `Command-/` to open the centered in-app About card with version and author information, or `Command-,` to toggle More Settings.
 - Running jobs keep the settings snapshot they started with, even if you keep editing presets or options while they are processing.
 - FFmpeg and FFprobe run outside the UI path, and progress updates are rate-limited so the app stays responsive during demanding encodes. ForgeFF intentionally runs one conversion job at a time to avoid multiplying CPU, GPU, memory, and disk pressure.
 
@@ -179,7 +179,7 @@ Create the same package locally with:
 ./script/package_release.sh
 ```
 
-The archive and checksum are written to the ignored `release/` directory. To publish a release, ensure `MARKETING_VERSION` matches the intended tag, push the main branch, then push an annotated tag such as `v2.6.2`. GitHub Actions validates the version, tests, builds, signs, verifies, packages, and creates the GitHub Release.
+The archive and checksum are written to the ignored `release/` directory. To publish a release, ensure `MARKETING_VERSION` matches the intended tag, push the main branch, then push an annotated tag such as `v2.6.3`. GitHub Actions validates the version, tests, builds, signs, verifies, packages, and creates the GitHub Release.
 
 ## Repository Notes
 
