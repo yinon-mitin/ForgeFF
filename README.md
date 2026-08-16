@@ -101,6 +101,7 @@ Download ForgeFF from GitHub Releases:
 - Completed rows show actual conversion time and the output size as a percentage of the original input size.
 - Output-size estimates start from the selected codec and quality settings, then become more accurate during conversion by using the bytes FFmpeg has actually written and the encoded duration.
 - Running queue rows show FFmpeg's current processing speed in frames per second.
+- Terminal queue rows show the average processing FPS calculated from the encoded frame count and total task time; the value is also included in JSON history and CSV exports.
 - `Efficient HEVC` keeps the Telegram preset's source resolution, FPS, quality, AAC stereo, and streaming-friendly MP4 settings while using HEVC for a smaller file.
 - Press `Command-/` to open About ForgeFF, or `Command-,` to toggle More Settings.
 - Running jobs keep the settings snapshot they started with, even if you keep editing presets or options while they are processing.
@@ -126,6 +127,8 @@ For the standard build-and-launch loop, use:
 
 Pass `--verify` for a launch smoke test, `--debug` for LLDB, `--logs` for the live app log, or `--telemetry` for ForgeFF subsystem events.
 
+The helper applies and verifies an ad-hoc signature after each local build. This requires no Apple Developer account.
+
 The equivalent direct build command is:
 
 ```bash
@@ -136,6 +139,9 @@ xcodebuild \
   -derivedDataPath .build/DerivedData \
   CODE_SIGNING_ALLOWED=NO \
   build
+
+codesign --force --deep --sign - --timestamp=none --options runtime --entitlements ForgeFF/ForgeFF.entitlements ".build/DerivedData/Build/Products/Debug/ForgeFF.app"
+codesign --verify --deep --strict --verbose=2 ".build/DerivedData/Build/Products/Debug/ForgeFF.app"
 ```
 
 Run the built app:
@@ -160,25 +166,20 @@ xcodebuild \
 
 The repository includes `.github/workflows/release.yml` for tagged macOS releases. The intended release flow is:
 
-1. Build a Release archive.
-2. Sign it with a Developer ID Application certificate.
-3. Notarize the archive with Apple.
+1. Run the test suite.
+2. Build a universal Release app for Apple silicon and Intel Macs.
+3. Apply and verify an ad-hoc code signature without an Apple Developer account.
 4. Upload `ForgeFF-X.Y.Z-macOS.zip` and its checksum to GitHub Releases.
 
-Required CI secrets are documented in the workflow file. Local release signing and notarization require Apple credentials and certificates that are not stored in this repository.
-For local smoke-test releases without signing, build `Release` with `CODE_SIGNING_ALLOWED=NO` and package the resulting `ForgeFF.app` into `release/ForgeFF-X.Y.Z-macOS.zip`.
+No Apple signing secrets are required. Ad-hoc signing protects the bundle from undetected modification after signing, but it does not identify the developer and cannot be notarized by Apple. Users may still need to right-click the app, choose `Open`, and confirm the first launch.
 
-Configure these GitHub Actions repository secrets before pushing a release tag:
+Create the same package locally with:
 
-- `APPLE_TEAM_ID`
-- `BUILD_KEYCHAIN_PASSWORD`
-- `APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64`
-- `APPLE_DEVELOPER_ID_APPLICATION_P12_PASSWORD`
-- `APPLE_NOTARY_API_KEY_ID`
-- `APPLE_NOTARY_API_ISSUER_ID`
-- `APPLE_NOTARY_API_PRIVATE_KEY_P8_BASE64`
+```bash
+./script/package_release.sh
+```
 
-To publish a release, ensure `MARKETING_VERSION` matches the intended tag, push the main branch, then push an annotated tag such as `v2.6.1`. The workflow runs the test suite, signs and notarizes the app, staples the notarization ticket, and creates the GitHub Release with its ZIP and SHA-256 file.
+The archive and checksum are written to the ignored `release/` directory. To publish a release, ensure `MARKETING_VERSION` matches the intended tag, push the main branch, then push an annotated tag such as `v2.6.2`. GitHub Actions validates the version, tests, builds, signs, verifies, packages, and creates the GitHub Release.
 
 ## Repository Notes
 

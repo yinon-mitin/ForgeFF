@@ -25,6 +25,8 @@ struct JobResultSummary: Codable, Equatable {
     var outputFileSize: Int64?
     var elapsedSeconds: Double?
     var averageSpeed: Double?
+    var encodedFrameCount: Int? = nil
+    var averageFramesPerSecond: Double? = nil
 }
 
 struct JobExecutionSnapshot: Codable, Equatable {

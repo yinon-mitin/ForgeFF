@@ -454,6 +454,13 @@ private struct QueueRowView: View {
                         .help("Current FFmpeg processing speed in frames per second.")
                 }
 
+                if let averageProcessingSpeedText {
+                    Text(averageProcessingSpeedText)
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(rowStyle.tertiaryTextColor)
+                        .help("Average FFmpeg processing speed for this task.")
+                }
+
                 if job.result?.outputFileSize == nil, let eta = job.estimatedRemainingSeconds {
                     Text("ETA \(etaString(eta))")
                         .font(.caption)
@@ -611,6 +618,13 @@ private struct QueueRowView: View {
               let framesPerSecond = job.currentFramesPerSecond,
               framesPerSecond > 0 else { return nil }
         return String(format: "%.1f FPS", framesPerSecond)
+    }
+
+    private var averageProcessingSpeedText: String? {
+        guard job.status.isTerminal,
+              let framesPerSecond = job.result?.averageFramesPerSecond,
+              framesPerSecond > 0 else { return nil }
+        return String(format: "Avg %.1f FPS", framesPerSecond)
     }
 
     private var sizeSummaryText: String {

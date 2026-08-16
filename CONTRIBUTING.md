@@ -24,3 +24,10 @@ Thanks for contributing to ForgeFF.
 - Update `CHANGELOG.md` for user-facing changes.
 - Keep `README.md` accurate when behavior, installation, or release flow changes.
 - Ensure local build and tests pass before opening PR.
+
+## Releases
+
+- Keep `MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`, and the top changelog entry in sync.
+- Run `./script/package_release.sh` to test the universal ad-hoc signed package locally.
+- Push an annotated `vX.Y.Z` tag only after the matching commit is on `main`; the release workflow needs no Apple signing secrets.
+- Ad-hoc builds are not Apple-notarized, so test the documented Gatekeeper first-launch path before publishing.

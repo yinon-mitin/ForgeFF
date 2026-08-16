@@ -20,6 +20,16 @@ build_app() {
         -derivedDataPath "$derived_data" \
         CODE_SIGNING_ALLOWED=NO \
         build
+
+    /usr/bin/codesign \
+        --force \
+        --deep \
+        --sign - \
+        --timestamp=none \
+        --options runtime \
+        --entitlements "$repo_root/ForgeFF/ForgeFF.entitlements" \
+        "$app_bundle"
+    /usr/bin/codesign --verify --deep --strict --verbose=2 "$app_bundle"
 }
 
 launch_app() {

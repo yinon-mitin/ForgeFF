@@ -12,6 +12,7 @@ struct JobHistoryRecord: Codable, Identifiable, Equatable {
     let outputSize: Int64?
     let durationSeconds: Double?
     let averageSpeed: Double?
+    let averageFramesPerSecond: Double?
     let resolutionDescription: String
     let videoCodec: String
     let audioCodec: String
@@ -39,6 +40,7 @@ struct JobHistoryRecord: Codable, Identifiable, Equatable {
             outputSize: job.result?.outputFileSize,
             durationSeconds: job.result?.elapsedSeconds,
             averageSpeed: job.result?.averageSpeed,
+            averageFramesPerSecond: job.result?.averageFramesPerSecond,
             resolutionDescription: resolution,
             videoCodec: recordedOptions.videoCodec.displayName,
             audioCodec: recordedOptions.audioCodec.displayName,

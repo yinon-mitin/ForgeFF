@@ -968,6 +968,10 @@ final class JobQueueStore: ObservableObject {
             let completionDate = Date()
             if let startedAt = jobs[refreshedIndex].startedAt {
                 completedResult.elapsedSeconds = max(0, completionDate.timeIntervalSince(startedAt))
+                completedResult.averageFramesPerSecond = FFmpegRunner.averageFramesPerSecond(
+                    encodedFrames: completedResult.encodedFrameCount,
+                    elapsedSeconds: completedResult.elapsedSeconds ?? 0
+                )
             }
             jobs[refreshedIndex].status = .completed
             jobs[refreshedIndex].progress = 1
@@ -998,7 +1002,16 @@ final class JobQueueStore: ObservableObject {
                 jobs[refreshedIndex].commandLine = commandTrace
             }
             jobs[refreshedIndex].ffmpegVersion = runner.lastResolvedVersion
-            jobs[refreshedIndex].completedAt = Date()
+            let completionDate = Date()
+            jobs[refreshedIndex].completedAt = completionDate
+            if let startedAt = jobs[refreshedIndex].startedAt {
+                let elapsedSeconds = max(0, completionDate.timeIntervalSince(startedAt))
+                jobs[refreshedIndex].result?.elapsedSeconds = elapsedSeconds
+                jobs[refreshedIndex].result?.averageFramesPerSecond = FFmpegRunner.averageFramesPerSecond(
+                    encodedFrames: jobs[refreshedIndex].result?.encodedFrameCount,
+                    elapsedSeconds: elapsedSeconds
+                )
+            }
             historyStore.append(job: jobs[refreshedIndex])
         }
 
@@ -1035,16 +1048,34 @@ final class JobQueueStore: ObservableObject {
                 sourceBytes: jobs[index].inputFileSizeBytes ?? jobs[index].metadata?.fileSizeBytes
             )
         }
+        let averageFramesPerSecond: Double? = {
+            guard let startedAt = jobs[index].startedAt else { return nil }
+            return FFmpegRunner.averageFramesPerSecond(
+                encodedFrames: progress.encodedFrames,
+                elapsedSeconds: Date().timeIntervalSince(startedAt)
+            )
+        }()
         if jobs[index].result == nil {
             jobs[index].result = JobResultSummary(
                 outputURL: nil,
                 outputFileSize: nil,
                 elapsedSeconds: nil,
-                averageSpeed: progress.speed
+                averageSpeed: progress.speed,
+                encodedFrameCount: progress.encodedFrames,
+                averageFramesPerSecond: averageFramesPerSecond
             )
         } else {
             if let speed = progress.speed {
                 jobs[index].result?.averageSpeed = speed
+            }
+            if let encodedFrames = progress.encodedFrames {
+                jobs[index].result?.encodedFrameCount = max(
+                    jobs[index].result?.encodedFrameCount ?? 0,
+                    encodedFrames
+                )
+            }
+            if let averageFramesPerSecond {
+                jobs[index].result?.averageFramesPerSecond = averageFramesPerSecond
             }
         }
     }

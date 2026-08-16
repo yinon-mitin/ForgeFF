@@ -4,6 +4,7 @@ import Foundation
 struct FFmpegProgress {
     var ratio: Double
     var encodedSeconds: Double
+    var encodedFrames: Int?
     var framesPerSecond: Double?
     var speed: Double?
     var etaSeconds: Double?
@@ -112,6 +113,7 @@ final class FFmpegRunner {
 
         let startDate = Date()
         var lastSpeed: Double?
+        var lastEncodedFrames: Int?
         lastResolvedVersion = await Self.resolveVersionString(for: invocation.executableURL)
         let finalSpeed = try await execute(
             executableURL: invocation.executableURL,
@@ -121,15 +123,24 @@ final class FFmpegRunner {
             progress: progress
         ) { update in
             lastSpeed = update.speed
+            if let encodedFrames = update.encodedFrames {
+                lastEncodedFrames = max(lastEncodedFrames ?? 0, encodedFrames)
+            }
         }
         lastSpeed = finalSpeed
 
+        let elapsedSeconds = Date().timeIntervalSince(startDate)
         let fileSize = (try? outputURL.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
         return JobResultSummary(
             outputURL: outputURL,
             outputFileSize: fileSize,
-            elapsedSeconds: Date().timeIntervalSince(startDate),
-            averageSpeed: lastSpeed
+            elapsedSeconds: elapsedSeconds,
+            averageSpeed: lastSpeed,
+            encodedFrameCount: lastEncodedFrames,
+            averageFramesPerSecond: Self.averageFramesPerSecond(
+                encodedFrames: lastEncodedFrames,
+                elapsedSeconds: elapsedSeconds
+            )
         )
     }
 
@@ -225,6 +236,7 @@ final class FFmpegRunner {
     static func parseProgress(line: String, totalDuration: Double?) -> FFmpegProgress? {
         guard let timeToken = value(in: line, key: "time") else { return nil }
         guard let encodedSeconds = parseTimestamp(timeToken) else { return nil }
+        let encodedFrames = value(in: line, key: "frame").flatMap(Int.init)
         let framesPerSecond = value(in: line, key: "fps").flatMap(Double.init)
         let speed = value(in: line, key: "speed").flatMap(parseSpeed)
         let outputBytes = value(in: line, key: "size").flatMap(parseOutputSize)
@@ -237,11 +249,17 @@ final class FFmpegRunner {
         return FFmpegProgress(
             ratio: ratio,
             encodedSeconds: encodedSeconds,
+            encodedFrames: encodedFrames,
             framesPerSecond: framesPerSecond,
             speed: speed,
             etaSeconds: eta,
             outputBytes: outputBytes
         )
+    }
+
+    static func averageFramesPerSecond(encodedFrames: Int?, elapsedSeconds: Double) -> Double? {
+        guard let encodedFrames, encodedFrames >= 0, elapsedSeconds > 0 else { return nil }
+        return Double(encodedFrames) / elapsedSeconds
     }
 
     private static func value(in line: String, key: String) -> String? {

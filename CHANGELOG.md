@@ -3,6 +3,23 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.6.2] - 2026-08-17
+
+### Added
+
+- Average processing FPS is calculated from FFmpeg's encoded frame count and the task's elapsed time, then shown for completed, failed, and cancelled jobs when data is available.
+- JSON history records and CSV exports now retain average processing FPS.
+- A local release packaging script builds a universal macOS app, applies an ad-hoc hardened-runtime signature with the app's sandbox entitlements, verifies it, and creates a ZIP with a SHA-256 checksum.
+
+### Changed
+
+- Local debug builds are ad-hoc signed before launch or debugging.
+- Tagged GitHub releases no longer require an Apple Developer account or repository signing secrets; GitHub Actions now applies an ad-hoc signature to the universal Release app.
+
+### Security
+
+- Ad-hoc signing verifies bundle integrity but does not establish a trusted developer identity or provide Apple notarization. Gatekeeper may still require users to confirm the first launch.
+
 ## [2.6.1] - 2026-08-16
 
 ### Added

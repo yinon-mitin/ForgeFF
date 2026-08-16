@@ -31,7 +31,7 @@ final class HistoryStore: ObservableObject {
     }
 
     func exportCSV(to url: URL) throws {
-        let header = "id,sourcePath,outputPath,preset,status,createdAt,completedAt,sourceSize,outputSize,durationSeconds,averageSpeed,resolution,videoCodec,audioCodec,dynamicRange"
+        let header = "id,sourcePath,outputPath,preset,status,createdAt,completedAt,sourceSize,outputSize,durationSeconds,averageSpeed,averageFPS,resolution,videoCodec,audioCodec,dynamicRange"
         let rows = records.map { record in
             let fields: [String] = [
                 record.id.uuidString,
@@ -45,6 +45,7 @@ final class HistoryStore: ObservableObject {
                 record.outputSize.map(String.init) ?? "",
                 record.durationSeconds.map { String(format: "%.2f", $0) } ?? "",
                 record.averageSpeed.map { String(format: "%.2f", $0) } ?? "",
+                record.averageFramesPerSecond.map { String(format: "%.2f", $0) } ?? "",
                 record.resolutionDescription,
                 record.videoCodec,
                 record.audioCodec,

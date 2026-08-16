@@ -487,6 +487,16 @@ final class FFmpegCommandBuilderTests: XCTestCase {
             totalDuration: 10
         )
         XCTAssertEqual(progress?.framesPerSecond, 38.7)
+        XCTAssertEqual(progress?.encodedFrames, 100)
+    }
+
+    func testAverageFramesPerSecondUsesEncodedFramesAndElapsedTime() {
+        XCTAssertEqual(
+            FFmpegRunner.averageFramesPerSecond(encodedFrames: 250, elapsedSeconds: 10),
+            25
+        )
+        XCTAssertNil(FFmpegRunner.averageFramesPerSecond(encodedFrames: nil, elapsedSeconds: 10))
+        XCTAssertNil(FFmpegRunner.averageFramesPerSecond(encodedFrames: 250, elapsedSeconds: 0))
     }
 
     func testRunningOutputEstimateRefinesFromObservedBytes() {

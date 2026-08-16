@@ -18,6 +18,9 @@ jobs:
         with:
           xcode-version: latest-stable
 
+      - name: Validate shell scripts
+        run: bash -n script/*.sh scripts/*.sh
+
       - name: Build and test
         run: |
           xcodebuild \
