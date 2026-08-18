@@ -221,22 +221,31 @@ final class JobQueueStore: ObservableObject {
         return QueueJobDisplayStatus(jobStatus: job.status)
     }
 
-    func addFiles(urls: [URL]) {
+    @discardableResult
+    func addFiles(urls: [URL], outputBesideSource: Bool = false) -> [UUID] {
         let options = settingsStore.restoreLastUsedOptions()
+        var addedJobIDs: [UUID] = []
 
         for url in urls where !url.hasDirectoryPath {
-            var job = VideoJob(sourceURL: url, options: options)
+            let outputDirectory = outputBesideSource ? url.deletingLastPathComponent() : nil
+            var job = VideoJob(sourceURL: url, outputDirectory: outputDirectory, options: options)
             job.status = .analyzing
             job.inputFileSizeBytes = readFileSize(at: url)
             refreshDerivedNaming(for: &job)
             jobs.append(job)
+            addedJobIDs.append(job.id)
             sourceBookmarkStore.store(url: url, for: job.id)
+            if let outputDirectory {
+                outputBookmarkStore.store(url: outputDirectory, for: job.id)
+            }
             admitNewJobIntoActiveScopeIfNeeded(jobID: job.id)
             selectedJobID = job.id
             Task {
                 await analyzeMetadata(for: job.id)
             }
         }
+
+        return addedJobIDs
     }
 
     func addFolder(url: URL) {

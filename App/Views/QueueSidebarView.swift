@@ -274,10 +274,12 @@ struct QueueListView: View {
                 Text("Or add files and folders to start a batch.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                presetCards
-                Menu("Add…") {
+
+                HStack(spacing: 10) {
                     Button("Add Files…", action: onAddFiles)
+                        .buttonStyle(.borderedProminent)
                     Button("Add Folder…", action: onAddFolder)
+                        .buttonStyle(.bordered)
                 }
             }
             .padding(24)
@@ -285,42 +287,6 @@ struct QueueListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var presetCards: some View {
-        VStack(spacing: 10) {
-            ForEach(recommendedPresetCards, id: \.title) { card in
-                Button {
-                    viewModel.selectPreset(named: card.presetName)
-                    onAddFiles()
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(card.title)
-                            .font(.headline)
-                        Text(card.subtitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .frame(maxWidth: 320)
-    }
-
-    private var recommendedPresetCards: [(title: String, subtitle: String, presetName: String)] {
-        [
-            ("Fast MP4 (H.264)", "Quick export for broad playback.", "MP4 — H.264 (Fast)"),
-            ("Efficient HEVC", "Telegram-style settings with smaller HEVC video.", ConversionPreset.efficientHEVCPresetName),
-            ("Editing ProRes", "Large edit-friendly mezzanine output.", "MOV — ProRes 422 (Editing)")
-        ]
-    }
 }
 
 private struct QueueRowView: View {

@@ -3,6 +3,24 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.6.4] - 2026-08-18
+
+### Added
+
+- ForgeFF registers supported video and audio formats with macOS so files can be sent to the app from Finder using Open With.
+- Files opened from Finder are added to the queue with the last-used conversion settings, selected automatically, and configured to export beside the source file when macOS grants access to that folder.
+- Homebrew FFmpeg detection now checks both standard `bin` symlinks and `opt/ffmpeg/bin` paths on Apple silicon and Intel Macs.
+
+### Changed
+
+- The empty queue now keeps preset selection in the sidebar and presents only clear Add Files and Add Folder actions in the detail area.
+- The sandbox remains enabled while read-only exceptions are limited to FFmpeg and FFprobe paths managed by Homebrew.
+
+### Fixed
+
+- Opening About no longer leaves sidebar keyboard-focus outlines visible through the dimmed backdrop.
+- Sidebar focus navigation normalizes accidental horizontal scrolling, preventing labels and preset cards from being clipped at the leading edge.
+
 ## [2.6.3] - 2026-08-17
 
 ### Added

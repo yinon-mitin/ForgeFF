@@ -30,7 +30,9 @@ struct FFmpegPathDetector {
             currentValue: currentFFmpegPath,
             candidates: [
                 "/opt/homebrew/bin/ffmpeg",
+                "/opt/homebrew/opt/ffmpeg/bin/ffmpeg",
                 "/usr/local/bin/ffmpeg",
+                "/usr/local/opt/ffmpeg/bin/ffmpeg",
                 "/usr/bin/ffmpeg"
             ],
             lookupName: "ffmpeg"
@@ -40,19 +42,21 @@ struct FFmpegPathDetector {
             currentValue: currentFFprobePath,
             candidates: [
                 "/opt/homebrew/bin/ffprobe",
+                "/opt/homebrew/opt/ffmpeg/bin/ffprobe",
                 "/usr/local/bin/ffprobe",
+                "/usr/local/opt/ffmpeg/bin/ffprobe",
                 "/usr/bin/ffprobe"
             ],
             lookupName: "ffprobe"
         )
 
         var hints: [String] = []
-        if pathExists("/opt/homebrew/bin/brew") || pathExists("/opt/homebrew/bin") {
+        if pathExists("/opt/homebrew/bin/brew") || pathExists("/opt/homebrew/opt/ffmpeg") {
             if ffmpeg == nil || ffprobe == nil {
                 hints.append("Homebrew was detected at /opt/homebrew, but FFmpeg tools are incomplete.")
             }
         }
-        if pathExists("/usr/local/bin/brew") || pathExists("/usr/local/bin") {
+        if pathExists("/usr/local/bin/brew") || pathExists("/usr/local/opt/ffmpeg") {
             if ffmpeg == nil || ffprobe == nil {
                 hints.append("Intel Homebrew paths were checked at /usr/local/bin.")
             }

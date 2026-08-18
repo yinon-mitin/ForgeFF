@@ -79,6 +79,25 @@ final class JobQueueStoreTests: XCTestCase {
         XCTAssertEqual(store.startButtonTitle, "Start")
     }
 
+    func testFinderOpenAddsSelectedFileBesideItsSource() throws {
+        let settings = makeConfiguredSettingsStore()
+        let history = HistoryStore()
+        let store = JobQueueStore(settingsStore: settings, historyStore: history)
+        let sourceFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("forgeff-open-with-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceFolder, withIntermediateDirectories: true)
+        let sourceURL = sourceFolder.appendingPathComponent("camera.mp4")
+        try Data(repeating: 1, count: 128).write(to: sourceURL)
+        defer { try? FileManager.default.removeItem(at: sourceFolder) }
+
+        let jobIDs = store.addFiles(urls: [sourceURL], outputBesideSource: true)
+
+        XCTAssertEqual(jobIDs.count, 1)
+        XCTAssertEqual(store.jobs.first?.sourceURL, sourceURL)
+        XCTAssertEqual(store.jobs.first?.outputDirectory, sourceFolder)
+        XCTAssertEqual(store.selectedJobID, jobIDs.first)
+    }
+
     func testPausedScopeRemovalResetsStateToIdleAndStartLabel() throws {
         let settings = SettingsStore(
             pathDetector: FFmpegPathDetector(

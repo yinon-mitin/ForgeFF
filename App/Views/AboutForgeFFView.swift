@@ -13,6 +13,7 @@ struct AboutForgeFFOverlay: View {
 
             AboutForgeFFView(onClose: onClose)
                 .padding(32)
+                .onTapGesture { }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("About ForgeFF")
@@ -97,7 +98,7 @@ struct AboutForgeFFView: View {
             }
         }
         .padding(24)
-        .frame(width: 520)
+        .frame(width: 520, alignment: .topLeading)
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {

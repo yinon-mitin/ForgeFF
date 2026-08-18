@@ -268,9 +268,7 @@ final class SidebarFocusRouter: ObservableObject {
         }
         pendingFocusRequest = nil
         activeTarget = target
-        if source == .keyboardTab || source == .keyboardShiftTab {
-            centerTargetInScrollViewOnNextRunLoop(target, reason: "focus")
-        }
+        centerTargetInScrollViewOnNextRunLoop(target, reason: "focus")
     }
 
     func focusNext(from target: SidebarFocusTarget, backwards: Bool) {
@@ -435,9 +433,7 @@ final class SidebarFocusRouter: ObservableObject {
             activeTarget = target
             currentFocusedTarget = target
             pendingFocusRequest = nil
-            if pending.source == .keyboardTab || pending.source == .keyboardShiftTab {
-                centerTargetInScrollViewOnNextRunLoop(target, reason: "pending")
-            }
+            centerTargetInScrollViewOnNextRunLoop(target, reason: "pending")
             return
         }
 
@@ -532,9 +528,10 @@ final class SidebarFocusRouter: ObservableObject {
         newY = min(max(newY, minY), maxY)
 
         let delta = newY - visibleRect.origin.y
-        if abs(delta) < 0.5 { return }
+        let horizontalOffset = visibleRect.origin.x
+        if abs(delta) < 0.5, abs(horizontalOffset) < 0.5 { return }
 
-        scrollView.contentView.scroll(to: NSPoint(x: visibleRect.origin.x, y: newY))
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: newY))
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 

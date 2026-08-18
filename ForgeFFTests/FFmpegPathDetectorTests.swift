@@ -18,6 +18,23 @@ final class FFmpegPathDetectorTests: XCTestCase {
         XCTAssertTrue(result.isConfigured)
     }
 
+    func testDetectUsesHomebrewOptFallbackWhenBinSymlinksAreUnavailable() {
+        let detector = FFmpegPathDetector(
+            isExecutable: { path in
+                path == "/opt/homebrew/opt/ffmpeg/bin/ffmpeg" ||
+                    path == "/opt/homebrew/opt/ffmpeg/bin/ffprobe"
+            },
+            commandLookup: { _ in nil },
+            pathExists: { path in path == "/opt/homebrew/opt/ffmpeg" }
+        )
+
+        let result = detector.detect(currentFFmpegPath: "", currentFFprobePath: "")
+
+        XCTAssertEqual(result.ffmpegPath, "/opt/homebrew/opt/ffmpeg/bin/ffmpeg")
+        XCTAssertEqual(result.ffprobePath, "/opt/homebrew/opt/ffmpeg/bin/ffprobe")
+        XCTAssertTrue(result.isConfigured)
+    }
+
     func testShouldShowOnboardingWhenOneBinaryMissing() {
         XCTAssertTrue(FFmpegPathDetector.shouldShowOnboarding(ffmpegPath: "", ffprobePath: ""))
     }

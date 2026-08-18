@@ -40,7 +40,7 @@ ForgeFF requires:
 - macOS 13 or newer
 - FFmpeg and FFprobe available on the machine
 
-ForgeFF does not bundle FFmpeg. The app will auto-detect common install locations on launch and will prompt for manual selection if it cannot find the binaries. The setup prompt can be closed if you only want to inspect the app, and it always allows quitting ForgeFF with `Command-Q`.
+ForgeFF does not bundle FFmpeg. The app auto-detects the standard Homebrew `bin` and `opt/ffmpeg/bin` locations on both Apple silicon and Intel Macs, and prompts for manual selection if it cannot find the binaries. The setup prompt can be closed if you only want to inspect the app, and it always allows quitting ForgeFF with `Command-Q`.
 
 Install FFmpeg with Homebrew:
 
@@ -61,6 +61,7 @@ Download ForgeFF from GitHub Releases:
 
 - Drag files or folders into the queue.
 - Use the toolbar `Add…` menu to import files or folders manually.
+- In Finder, right-click a supported media file and choose `Open With` → `ForgeFF`. The file is added with the last-used conversion settings and its output is placed beside the source file when macOS grants access to that folder.
 - Select one or more queue items to apply settings to a subset of the queue.
 
 ### Pick a preset
@@ -179,7 +180,7 @@ Create the same package locally with:
 ./script/package_release.sh
 ```
 
-The archive and checksum are written to the ignored `release/` directory. To publish a release, ensure `MARKETING_VERSION` matches the intended tag, push the main branch, then push an annotated tag such as `v2.6.3`. GitHub Actions validates the version, tests, builds, signs, verifies, packages, and creates the GitHub Release.
+The archive and checksum are written to the ignored `release/` directory. To publish a release, ensure `MARKETING_VERSION` matches the intended tag, push the main branch, then push an annotated tag such as `v2.6.4`. GitHub Actions validates the version, tests, builds, signs, verifies, packages, and creates the GitHub Release.
 
 ## Repository Notes
 

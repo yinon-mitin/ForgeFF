@@ -25,7 +25,7 @@ struct MainWindowView: View {
         NavigationSplitView(columnVisibility: $splitViewVisibility) {
             PresetOptionsPanelView(
                 viewModel: viewModel,
-                isSidebarVisible: splitViewVisibility != .detailOnly
+                isSidebarVisible: splitViewVisibility != .detailOnly && !isAboutPresented
             )
                 .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 380)
         } detail: {
@@ -97,6 +97,7 @@ struct MainWindowView: View {
                 viewModel.refreshDraftOptions()
             }
         }
+        .onOpenURL(perform: openFromFinder)
         .confirmationDialog("Clear Entire Queue?", isPresented: $isClearConfirmationPresented, titleVisibility: .visible) {
             Button("Clear Entire Queue", role: .destructive) {
                 queueStore.clearAllItems()
@@ -259,6 +260,15 @@ struct MainWindowView: View {
                 isAboutPresented = true
             }
         }
+    }
+
+    private func openFromFinder(_ url: URL) {
+        guard url.isFileURL, !url.hasDirectoryPath else { return }
+        let addedJobIDs = queueStore.addFiles(urls: [url], outputBesideSource: true)
+        guard !addedJobIDs.isEmpty else { return }
+        viewModel.selectedJobIDs = Set(addedJobIDs)
+        viewModel.refreshDraftOptions()
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private var inspectedFailureJob: VideoJob? {
