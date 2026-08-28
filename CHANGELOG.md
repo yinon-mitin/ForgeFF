@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.6.5] - 2026-08-28
+
+### Fixed
+
+- Tests no longer depend on the user's persisted ForgeFF settings.
+- Opening multiple media files from Finder with Open With now adds every selected file to the queue.
+- The main window and failure inspector adapt better to smaller window sizes instead of forcing content beyond the visible bounds.
+
 ## [2.6.4] - 2026-08-18
 
 ### Added

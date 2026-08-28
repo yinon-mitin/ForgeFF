@@ -8,6 +8,7 @@ struct MainWindowView: View {
     @EnvironmentObject private var queueStore: JobQueueStore
     @EnvironmentObject private var settingsStore: SettingsStore
     @EnvironmentObject private var commandHandler: AppCommandHandler
+    @EnvironmentObject private var appDelegate: ForgeFFAppDelegate
 
     @ObservedObject var viewModel: QueueViewModel
 
@@ -27,7 +28,7 @@ struct MainWindowView: View {
                 viewModel: viewModel,
                 isSidebarVisible: splitViewVisibility != .detailOnly && !isAboutPresented
             )
-                .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 380)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 300, max: 360)
         } detail: {
             HSplitView {
                 VStack(spacing: 0) {
@@ -51,7 +52,7 @@ struct MainWindowView: View {
                     Divider()
                     footer
                 }
-                .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
 
                 if let inspectedFailureJob {
                     QueueFailureInspectorView(
@@ -66,7 +67,7 @@ struct MainWindowView: View {
                         onRevealOutput: { queueStore.revealOutput(for: inspectedFailureJob.id) },
                         onOpenOutputFolder: { queueStore.openOutputFolder(for: inspectedFailureJob.id) }
                     )
-                    .frame(minWidth: 300, idealWidth: 360, maxWidth: 480, maxHeight: .infinity)
+                    .frame(minWidth: 0, idealWidth: 320, maxWidth: 420, maxHeight: .infinity)
                 }
             }
             .id(inspectorLayoutIdentity)
@@ -97,7 +98,7 @@ struct MainWindowView: View {
                 viewModel.refreshDraftOptions()
             }
         }
-        .onOpenURL(perform: openFromFinder)
+        .onOpenURL { openFromFinder(urls: [$0]) }
         .confirmationDialog("Clear Entire Queue?", isPresented: $isClearConfirmationPresented, titleVisibility: .visible) {
             Button("Clear Entire Queue", role: .destructive) {
                 queueStore.clearAllItems()
@@ -126,6 +127,10 @@ struct MainWindowView: View {
             settingsStore.refreshBinaryDetection()
             wireCommandHandlers()
             installQuickLookMonitorIfNeeded()
+            openFromFinder(urls: appDelegate.consumePendingOpenURLs())
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .forgeFFOpenFiles)) { _ in
+            openFromFinder(urls: appDelegate.consumePendingOpenURLs())
         }
         .onDisappear {
             removeQuickLookMonitor()
@@ -262,9 +267,10 @@ struct MainWindowView: View {
         }
     }
 
-    private func openFromFinder(_ url: URL) {
-        guard url.isFileURL, !url.hasDirectoryPath else { return }
-        let addedJobIDs = queueStore.addFiles(urls: [url], outputBesideSource: true)
+    private func openFromFinder(urls: [URL]) {
+        let fileURLs = urls.filter { $0.isFileURL && !$0.hasDirectoryPath }
+        guard !fileURLs.isEmpty else { return }
+        let addedJobIDs = queueStore.addFiles(urls: fileURLs, outputBesideSource: true)
         guard !addedJobIDs.isEmpty else { return }
         viewModel.selectedJobIDs = Set(addedJobIDs)
         viewModel.refreshDraftOptions()

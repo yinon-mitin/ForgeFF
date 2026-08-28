@@ -3,23 +3,31 @@ import XCTest
 
 @MainActor
 final class JobQueueStoreTests: XCTestCase {
-    private func makeConfiguredSettingsStore() -> SettingsStore {
-        SettingsStore(
+    private func makeSettingsStore(
+        isExecutable: @escaping (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) },
+        commandLookup: @escaping (String) -> String? = { _ in "/usr/bin/true" },
+        pathExists: @escaping (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+    ) -> SettingsStore {
+        let defaults = UserDefaults(suiteName: "ForgeFFTests.\(UUID().uuidString)")!
+        return SettingsStore(
             pathDetector: FFmpegPathDetector(
-                isExecutable: { FileManager.default.isExecutableFile(atPath: $0) },
-                commandLookup: { _ in "/usr/bin/true" },
-                pathExists: { FileManager.default.fileExists(atPath: $0) }
-            )
+                isExecutable: isExecutable,
+                commandLookup: commandLookup,
+                pathExists: pathExists
+            ),
+            defaults: defaults
         )
     }
 
+    private func makeConfiguredSettingsStore() -> SettingsStore {
+        makeSettingsStore()
+    }
+
     func testRemovingRunningJobWithNoRemainingItemsResetsToIdle() throws {
-        let settings = SettingsStore(
-            pathDetector: FFmpegPathDetector(
-                isExecutable: { _ in false },
-                commandLookup: { _ in nil },
-                pathExists: { _ in false }
-            )
+        let settings = makeSettingsStore(
+            isExecutable: { _ in false },
+            commandLookup: { _ in nil },
+            pathExists: { _ in false }
         )
         let history = HistoryStore()
         let store = JobQueueStore(settingsStore: settings, historyStore: history)
@@ -41,12 +49,10 @@ final class JobQueueStoreTests: XCTestCase {
     }
 
     func testClearAfterCancelResetsToIdleAndStartWorksAfterReAdd() throws {
-        let settings = SettingsStore(
-            pathDetector: FFmpegPathDetector(
-                isExecutable: { _ in false },
-                commandLookup: { _ in nil },
-                pathExists: { _ in false }
-            )
+        let settings = makeSettingsStore(
+            isExecutable: { _ in false },
+            commandLookup: { _ in nil },
+            pathExists: { _ in false }
         )
         let history = HistoryStore()
         let store = JobQueueStore(settingsStore: settings, historyStore: history)
@@ -99,12 +105,10 @@ final class JobQueueStoreTests: XCTestCase {
     }
 
     func testPausedScopeRemovalResetsStateToIdleAndStartLabel() throws {
-        let settings = SettingsStore(
-            pathDetector: FFmpegPathDetector(
-                isExecutable: { _ in false },
-                commandLookup: { _ in nil },
-                pathExists: { _ in false }
-            )
+        let settings = makeSettingsStore(
+            isExecutable: { _ in false },
+            commandLookup: { _ in nil },
+            pathExists: { _ in false }
         )
         let history = HistoryStore()
         let store = JobQueueStore(settingsStore: settings, historyStore: history)
@@ -153,12 +157,10 @@ final class JobQueueStoreTests: XCTestCase {
     }
 
     func testCancellingWithRemainingReadyAfterRemovalResetsToIdleAndCanStart() throws {
-        let settings = SettingsStore(
-            pathDetector: FFmpegPathDetector(
-                isExecutable: { _ in false },
-                commandLookup: { _ in nil },
-                pathExists: { _ in false }
-            )
+        let settings = makeSettingsStore(
+            isExecutable: { _ in false },
+            commandLookup: { _ in nil },
+            pathExists: { _ in false }
         )
         let history = HistoryStore()
         let store = JobQueueStore(settingsStore: settings, historyStore: history)

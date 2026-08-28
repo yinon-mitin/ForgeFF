@@ -3,6 +3,25 @@ import XCTest
 
 @MainActor
 final class AppCommandHandlerTests: XCTestCase {
+    func testOpenFilesHandlerPublishesAllSelectedURLs() {
+        let delegate = ForgeFFAppDelegate()
+        let urls = [URL(fileURLWithPath: "/tmp/first.mp4"), URL(fileURLWithPath: "/tmp/second.mov")]
+        let expectation = expectation(description: "open files notification")
+        let token = NotificationCenter.default.addObserver(
+            forName: .forgeFFOpenFiles,
+            object: nil,
+            queue: .main
+        ) { notification in
+            XCTAssertEqual(notification.object as? [URL], urls)
+            expectation.fulfill()
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        delegate.handleOpenFiles(urls: urls)
+
+        wait(for: [expectation], timeout: 1)
+    }
+
     func testTriggerMethodsCallMappedActions() {
         let handler = AppCommandHandler()
         var invocations: [String] = []

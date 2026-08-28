@@ -1,7 +1,38 @@
+import AppKit
 import SwiftUI
+
+extension Notification.Name {
+    static let forgeFFOpenFiles = Notification.Name("ForgeFF.openFiles")
+}
+
+@MainActor
+final class ForgeFFAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    @Published private(set) var pendingOpenURLs: [URL] = []
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        handleOpenFiles(urls: urls)
+    }
+
+    func application(_ application: NSApplication, openFiles filenames: [String]) {
+        handleOpenFiles(urls: filenames.map { URL(fileURLWithPath: $0) })
+    }
+
+    func handleOpenFiles(urls: [URL]) {
+        let fileURLs = urls.filter { $0.isFileURL && !$0.hasDirectoryPath }
+        guard !fileURLs.isEmpty else { return }
+        pendingOpenURLs.append(contentsOf: fileURLs)
+        NotificationCenter.default.post(name: .forgeFFOpenFiles, object: fileURLs)
+    }
+
+    func consumePendingOpenURLs() -> [URL] {
+        defer { pendingOpenURLs.removeAll() }
+        return pendingOpenURLs
+    }
+}
 
 @main
 struct ForgeFFApp: App {
+    @NSApplicationDelegateAdaptor(ForgeFFAppDelegate.self) private var appDelegate
     @StateObject private var settingsStore: SettingsStore
     @StateObject private var historyStore: HistoryStore
     @StateObject private var userPresetStore: UserPresetStore
@@ -29,12 +60,13 @@ struct ForgeFFApp: App {
     var body: some Scene {
         WindowGroup {
             MainWindowView(viewModel: viewModel)
-                .frame(minWidth: 900, minHeight: 600)
+                .frame(minWidth: 720, minHeight: 480)
                 .environmentObject(settingsStore)
                 .environmentObject(historyStore)
                 .environmentObject(queueStore)
                 .environmentObject(commandHandler)
                 .environmentObject(dockProgressController)
+                .environmentObject(appDelegate)
         }
         .defaultSize(width: 1100, height: 700)
         .commands {

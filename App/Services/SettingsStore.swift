@@ -38,7 +38,7 @@ final class SettingsStore: ObservableObject {
         didSet { save() }
     }
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
     private let settingsKey = "ForgeFF.appSettings"
     private let pathDetector: FFmpegPathDetector
 
@@ -47,8 +47,12 @@ final class SettingsStore: ObservableObject {
     @Published var filterCapabilities: FFmpegFilterCapabilities = .unknown
     @Published var avconvertCapabilities: AVConvertCapabilities = .unavailable
 
-    init(pathDetector: FFmpegPathDetector = FFmpegPathDetector()) {
+    init(
+        pathDetector: FFmpegPathDetector = FFmpegPathDetector(),
+        defaults: UserDefaults = .standard
+    ) {
         self.pathDetector = pathDetector
+        self.defaults = defaults
         if let data = defaults.data(forKey: settingsKey),
            let decoded = try? JSONDecoder().decode(AppSettings.self, from: data) {
             settings = decoded

@@ -194,7 +194,10 @@ final class ConversionOptionsTests: XCTestCase {
 @MainActor
 final class PresetBehaviorTests: XCTestCase {
     private func makeViewModel(fileURL: URL) -> QueueViewModel {
-        let settings = SettingsStore(pathDetector: FFmpegPathDetector())
+        let settings = SettingsStore(
+            pathDetector: FFmpegPathDetector(),
+            defaults: UserDefaults(suiteName: "ForgeFFTests.\(UUID().uuidString)")!
+        )
         let history = HistoryStore()
         let queueStore = JobQueueStore(settingsStore: settings, historyStore: history)
         let userPresetStore = UserPresetStore(fileURL: fileURL)
