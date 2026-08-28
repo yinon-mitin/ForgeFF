@@ -53,7 +53,7 @@ struct FailureDiagnosticReport: Equatable {
             ? "\(videoStream?.width ?? 0)x\(videoStream?.height ?? 0)"
             : "Unknown"
 
-        var lines = [
+        let taskLines: [String] = [
             "ForgeFF Conversion Diagnostic Report",
             "Generated: \(Self.iso8601Formatter.string(from: generatedAt))",
             "Application: ForgeFF \(appVersion) (\(appBuild))",
@@ -73,6 +73,9 @@ struct FailureDiagnosticReport: Equatable {
             "Input bytes: \(job.inputFileSizeBytes ?? job.metadata?.fileSizeBytes ?? 0)",
             "Elapsed seconds: \(Self.decimalString(job.result?.elapsedSeconds))",
             "Average processing FPS: \(Self.decimalString(job.result?.averageFramesPerSecond))",
+        ]
+
+        let errorLines: [String] = [
             "",
             "Error Summary",
             job.errorSummary ?? (job.status == .cancelled ? "The conversion was cancelled." : "Conversion failed."),
@@ -86,6 +89,7 @@ struct FailureDiagnosticReport: Equatable {
             "Error Log",
             job.errorLog ?? "No details available."
         ]
+        var lines = taskLines + errorLines
         lines.append("")
         contents = lines.joined(separator: "\n")
     }
