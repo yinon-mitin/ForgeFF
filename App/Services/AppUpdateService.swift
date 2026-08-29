@@ -161,7 +161,8 @@ final class AppUpdateService: ObservableObject {
             let parts = line.split(maxSplits: 1, whereSeparator: { $0 == " " || $0 == "\t" })
             guard parts.count == 2 else { continue }
             let digest = String(parts[0]).lowercased()
-            let filename = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let rawFilename = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let filename = URL(fileURLWithPath: String(rawFilename.drop(while: { $0 == "*" }))).lastPathComponent
             guard digest.count == 64,
                   digest.allSatisfy({ $0.isHexDigit }),
                   filename.hasPrefix("ForgeFF-"),

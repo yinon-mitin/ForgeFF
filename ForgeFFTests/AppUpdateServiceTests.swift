@@ -30,6 +30,16 @@ final class AppUpdateServiceTests: XCTestCase {
         XCTAssertEqual(checksum, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
     }
 
+    func testChecksumParserAcceptsRunnerAbsolutePath() throws {
+        let checksum = try XCTUnwrap(
+            AppUpdateService.parseChecksum(
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  /Users/runner/work/_temp/ForgeFF-2.6.10-macOS.zip\n",
+                expectedFilename: "ForgeFF-2.6.10-macOS.zip"
+            )
+        )
+        XCTAssertEqual(checksum, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+    }
+
     func testChecksumParserRejectsMalformedOrMismatchedOutput() {
         XCTAssertNil(AppUpdateService.parseChecksum("not-a-checksum  ForgeFF.zip"))
         XCTAssertNil(AppUpdateService.parseChecksum("0123456789abcdef  Other.zip"))
