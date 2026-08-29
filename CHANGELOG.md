@@ -5,6 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.6.14] - 2026-08-29
+
+### Fixed
+
+- About ForgeFF now opens as a system modal sheet so the entire parent window, including the toolbar, is dimmed consistently.
+
 ## [2.6.13] - 2026-08-29
 
 - Automated release from main.

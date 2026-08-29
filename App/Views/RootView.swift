@@ -76,19 +76,16 @@ struct MainWindowView: View {
             .background(Color(nsColor: .windowBackgroundColor))
         }
         .navigationSplitViewStyle(.balanced)
-        .overlay {
-            if isAboutPresented {
-                AboutForgeFFOverlay {
-                    withAnimation(.easeOut(duration: 0.18)) {
-                        isAboutPresented = false
-                    }
-                }
-                .transition(.opacity.combined(with: .scale(scale: 0.97)))
-                .zIndex(10)
-            }
-        }
         .toolbar {
             toolbarContent
+        }
+        .sheet(isPresented: $isAboutPresented) {
+            AboutForgeFFView {
+                isAboutPresented = false
+            }
+            .environmentObject(updateService)
+            .frame(width: 520)
+            .padding(8)
         }
         .fileImporter(
             isPresented: $isFileImporterPresented,
