@@ -4,7 +4,7 @@ This document contains repository-maintainer notes that are intentionally kept o
 
 ## Visual assets
 
-- Canonical icon source: `forgeFF-icon-v2.png`
+- Canonical icon source: `forgeFF-icon-v3.png` (derived from `docs/forgeff-icon.svg`)
 - Generated app icons: `ForgeFF/Assets.xcassets/AppIcon.appiconset/`
 - Local README banner: `docs/forgeff-banner.svg`
 
