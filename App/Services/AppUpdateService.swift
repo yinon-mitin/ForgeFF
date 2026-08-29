@@ -127,7 +127,8 @@ final class AppUpdateService: ObservableObject {
             try Self.launchReplacementUpdater(
                 newAppURL: candidateURL,
                 currentAppURL: Bundle.main.bundleURL,
-                stagingDirectoryURL: temporaryDirectory
+                stagingDirectoryURL: temporaryDirectory,
+                currentProcessID: ProcessInfo.processInfo.processIdentifier
             )
             state = .ready(release)
             NSApp.terminate(nil)
@@ -249,15 +250,28 @@ final class AppUpdateService: ObservableObject {
     private static func launchReplacementUpdater(
         newAppURL: URL,
         currentAppURL: URL,
-        stagingDirectoryURL: URL
+        stagingDirectoryURL: URL,
+        currentProcessID: Int32
     ) throws {
         let script = """
         #!/bin/sh
-        sleep 1
+        set -eu
+        current_pid=\(currentProcessID)
+        attempts=0
+        while /bin/kill -0 \"$current_pid\" 2>/dev/null; do
+            /bin/sleep 0.25
+            attempts=$((attempts + 1))
+            if [ \"$attempts\" -ge 120 ]; then
+                exit 1
+            fi
+        done
+        test -d \(shellQuote(newAppURL.path))
         /bin/rm -rf -- \(shellQuote(currentAppURL.path))
         /usr/bin/ditto \(shellQuote(newAppURL.path)) \(shellQuote(currentAppURL.path))
+        test -d \(shellQuote(currentAppURL.path))
         /usr/bin/open \(shellQuote(currentAppURL.path))
         /bin/rm -rf -- \(shellQuote(stagingDirectoryURL.path))
+        /bin/rm -f -- \"$0\"
         """
         let scriptURL = FileManager.default.temporaryDirectory.appendingPathComponent("ForgeFF-updater-\(UUID().uuidString).sh")
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
