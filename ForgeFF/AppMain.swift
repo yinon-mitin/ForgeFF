@@ -96,6 +96,13 @@ private struct ForgeFFCommands: Commands {
             .keyboardShortcut("/", modifiers: [.command])
         }
 
+        CommandGroup(replacing: .appTermination) {
+            Button("Quit ForgeFF") {
+                NSApp.terminate(nil)
+            }
+            .keyboardShortcut("q", modifiers: [.command])
+        }
+
         CommandGroup(replacing: .appSettings) {
             Button("Toggle More Settings") {
                 commandHandler.triggerToggleMoreSettings()
