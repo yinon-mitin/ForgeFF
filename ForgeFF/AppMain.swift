@@ -116,6 +116,26 @@ private struct ForgeFFCommands: Commands {
         }
 
         CommandMenu("Queue") {
+            Button("Pause Current Conversion") {
+                queueStore.pauseCurrentJob()
+            }
+            .keyboardShortcut("c", modifiers: [.control])
+
+            Button("Copy Selected File") {
+                copySelectedFile()
+            }
+            .keyboardShortcut("c", modifiers: [.command])
+
+            Button("Paste Files into Queue") {
+                pasteFilesIntoQueue()
+            }
+            .keyboardShortcut("v", modifiers: [.command])
+
+            Button("Cut Completed Output") {
+                cutCompletedOutput()
+            }
+            .keyboardShortcut("x", modifiers: [.command])
+
             Button("\(queueStore.startButtonTitle(selectedJobIDs: viewModel.selectedJobIDs)) Queue") {
                 commandHandler.triggerStartOrResume()
             }
@@ -146,5 +166,41 @@ private struct ForgeFFCommands: Commands {
             }
             .keyboardShortcut("l", modifiers: [.command])
         }
+    }
+
+    private var selectedJobs: [VideoJob] {
+        queueStore.jobs.filter { viewModel.selectedJobIDs.contains($0.id) }
+    }
+
+    private func copySelectedFile() {
+        let urls = selectedJobs.map(\.previewURL)
+        guard !urls.isEmpty else { return }
+        writeFileURLsToPasteboard(urls)
+    }
+
+    private func cutCompletedOutput() {
+        let urls: [URL] = selectedJobs.compactMap { job in
+            guard job.status == .completed else { return nil }
+            return job.result?.outputURL
+        }
+        guard !urls.isEmpty else { return }
+        writeFileURLsToPasteboard(urls)
+    }
+
+    private func writeFileURLsToPasteboard(_ urls: [URL]) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects(urls as [NSURL])
+    }
+
+    private func pasteFilesIntoQueue() {
+        let urls = NSPasteboard.general.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL] ?? []
+        let files = urls.filter { $0.isFileURL && !$0.hasDirectoryPath }
+        guard !files.isEmpty else { return }
+        queueStore.addFiles(urls: files)
+        viewModel.refreshDraftOptions()
     }
 }
