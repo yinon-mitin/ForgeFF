@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.6.8] - 2026-08-29
+
+- Automated release from main.
+
 ### Fixed
 
 - Finder `Open With` metadata analysis now works with Homebrew FFprobe builds that load external codec libraries such as `libvmaf`; the desktop target no longer enables App Sandbox, which cannot load those external dynamic libraries.
