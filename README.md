@@ -60,8 +60,9 @@ Download ForgeFF from GitHub Releases:
 
 1. Download the latest `ForgeFF-X.Y.Z-macOS.zip` archive from the repository’s Releases page.
 2. Unzip the archive and drag `ForgeFF.app` into `/Applications`.
-3. Launch the app.
-4. If Gatekeeper blocks first run, right-click the app, choose `Open`, and confirm.
+3. Launch the app once. macOS may block the first launch because ForgeFF uses an ad-hoc, non-notarized signature.
+4. Open `System Settings` → `Privacy & Security`, scroll to the security section, and click `Open Anyway` for ForgeFF.
+5. Confirm the launch, then open ForgeFF normally. This approval is usually required only once per installed version.
 
 ## Usage
 
