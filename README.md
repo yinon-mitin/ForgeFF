@@ -1,9 +1,15 @@
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/69c44ff9-208e-450f-a06f-f080c6028ddb" width="33%" alt="ForgeFF icon">
+  <img src="docs/forgeff-banner.svg" width="100%" alt="ForgeFF — media conversion, forged for macOS">
 </p>
 
-<h1 align="center">ForgeFF</h1>
-<p align="center">Simple and powerful video conversion for macOS.</p>
+<p align="center">
+  <a href="https://github.com/yinon-mitin/ForgeFF/actions/workflows/macos-ci.yml"><img src="https://github.com/yinon-mitin/ForgeFF/actions/workflows/macos-ci.yml/badge.svg" alt="macOS CI"></a>
+  <a href="https://github.com/yinon-mitin/ForgeFF/releases"><img src="https://img.shields.io/github/v/release/yinon-mitin/ForgeFF?display_name=tag&sort=semver" alt="Latest release"></a>
+  <a href="https://github.com/yinon-mitin/ForgeFF/blob/main/LICENSE"><img src="https://img.shields.io/github/license/yinon-mitin/ForgeFF" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/macOS-13%2B-11131a?logo=apple&logoColor=white" alt="macOS 13 or newer">
+</p>
+
+<p align="center"><strong>Simple and powerful batch media conversion for macOS.</strong><br>FFmpeg power without living in the terminal.</p>
 
 ## Introduction
 
@@ -39,6 +45,8 @@ ForgeFF requires:
 
 - macOS 13 or newer
 - FFmpeg and FFprobe available on the machine
+
+ForgeFF is distributed as a non-sandboxed desktop application because it executes the machine's externally installed Homebrew FFmpeg/FFprobe binaries and their dynamic codec libraries. This is required for reliable Finder `Open With` imports and metadata analysis; the app does not bundle or upload media files.
 
 ForgeFF does not bundle FFmpeg. The app auto-detects the standard Homebrew `bin` and `opt/ffmpeg/bin` locations on both Apple silicon and Intel Macs, and prompts for manual selection if it cannot find the binaries. The setup prompt can be closed if you only want to inspect the app, and it always allows quitting ForgeFF with `Command-Q`.
 

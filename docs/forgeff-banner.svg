@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 520" role="img" aria-labelledby="title desc">
+  <title id="title">ForgeFF — macOS media conversion</title>
+  <desc id="desc">A dark cinematic ForgeFF wordmark with a forged play symbol and media waveform.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#11131a"/>
+      <stop offset="0.55" stop-color="#1a1d29"/>
+      <stop offset="1" stop-color="#0d0f14"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffb45c"/>
+      <stop offset="1" stop-color="#f26b4f"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffb45c"/>
+      <stop offset="1" stop-color="#ef6b78"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000" flood-opacity=".42"/>
+    </filter>
+    <filter id="soft" x="-30%" y="-50%" width="160%" height="200%">
+      <feGaussianBlur stdDeviation="26"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="520" rx="34" fill="url(#bg)"/>
+  <circle cx="1330" cy="-20" r="320" fill="#f26b4f" opacity=".10" filter="url(#soft)"/>
+  <circle cx="260" cy="560" r="300" fill="#5d72ff" opacity=".09" filter="url(#soft)"/>
+  <path d="M0 420 C260 330 410 470 650 395 S1090 330 1600 415" fill="none" stroke="#fff" stroke-opacity=".045" stroke-width="2"/>
+  <path d="M0 452 C260 362 410 502 650 427 S1090 362 1600 447" fill="none" stroke="#fff" stroke-opacity=".035" stroke-width="2"/>
+
+  <g transform="translate(104 100)" filter="url(#shadow)">
+    <rect width="300" height="300" rx="74" fill="#202431" stroke="#ffffff" stroke-opacity=".10" stroke-width="2"/>
+    <rect x="24" y="24" width="252" height="252" rx="58" fill="none" stroke="url(#glow)" stroke-opacity=".28" stroke-width="3"/>
+    <path d="M103 73 L222 150 L103 227 Z" fill="url(#glow)"/>
+    <path d="M65 150 H95 M205 150 H235" stroke="#fff" stroke-opacity=".75" stroke-width="8" stroke-linecap="round"/>
+    <path d="M69 119 V181 M83 101 V199 M217 101 V199 M231 119 V181" stroke="#fff" stroke-opacity=".58" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="150" cy="150" r="111" fill="none" stroke="#fff" stroke-opacity=".07" stroke-width="2"/>
+  </g>
+
+  <g fill="#fff">
+    <text x="500" y="213" font-family="-apple-system,BlinkMacSystemFont,'SF Pro Display',Helvetica,Arial,sans-serif" font-size="104" font-weight="750" letter-spacing="-4">ForgeFF</text>
+    <text x="507" y="280" fill="#b8bdca" font-family="-apple-system,BlinkMacSystemFont,'SF Pro Text',Helvetica,Arial,sans-serif" font-size="30" letter-spacing="1.5">MEDIA CONVERSION, FORGED FOR macOS</text>
+  </g>
+  <g transform="translate(510 337)">
+    <path d="M0 25 H480" stroke="#fff" stroke-opacity=".12" stroke-width="2"/>
+    <path d="M0 25 C20 25 20 5 40 5 S60 45 80 45 S100 12 120 12 S140 37 160 37 S180 0 200 0 S220 52 240 52 S260 18 280 18 S300 42 320 42 S340 8 360 8 S380 32 400 32 S420 15 440 15 S460 25 480 25" fill="none" stroke="url(#wave)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="480" cy="25" r="6" fill="#ffb45c"/>
+  </g>
+  <text x="510" y="413" fill="#7f8798" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18" letter-spacing="2">BATCH QUEUE  ·  PRESETS  ·  HDR  ·  FFmpeg</text>
+</svg>

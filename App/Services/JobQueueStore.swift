@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import OSLog
 import UniformTypeIdentifiers
 
 struct QueueFooterSummary {
@@ -84,6 +85,7 @@ final class JobQueueStore: ObservableObject {
     private let avconvertRunner = AVConvertRunner()
     private let sourceBookmarkStore = SecurityScopedBookmarkStore()
     private let outputBookmarkStore = SecurityScopedBookmarkStore()
+    private let logger = Logger(subsystem: "com.yinonmitin.ForgeFF", category: "metadata")
     private var queueTask: Task<Void, Never>?
     private var activeProcessingSessionID: UUID?
     private var executionState = QueueExecutionState()
@@ -854,11 +856,13 @@ final class JobQueueStore: ObservableObject {
             jobs[refreshedIndex].status = .ready
             refreshDerivedNaming(for: &jobs[refreshedIndex])
             admitNewJobIntoActiveScopeIfNeeded(jobID: jobID)
+            logger.info("Metadata analysis succeeded")
         } catch {
             guard let refreshedIndex = jobs.firstIndex(where: { $0.id == jobID }) else { return }
             jobs[refreshedIndex].status = .failed
             jobs[refreshedIndex].errorMessage = "Could not read media metadata. File may be unsupported or inaccessible."
             jobs[refreshedIndex].errorDetails = error.localizedDescription
+            logger.error("Metadata analysis failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 

@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- Finder `Open With` metadata analysis now works with Homebrew FFprobe builds that load external codec libraries such as `libvmaf`; the desktop target no longer enables App Sandbox, which cannot load those external dynamic libraries.
+- Metadata analysis now records a safe success/failure event in the ForgeFF subsystem log without logging media contents or credentials.
+
 ## [2.6.7] - 2026-08-28
 
 ### Fixed
@@ -11,14 +18,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Opening multiple media files from Finder with Open With now adds every selected file to the queue.
 - The main window and failure inspector adapt better to smaller window sizes instead of forcing content beyond the visible bounds.
 - Diagnostic report string construction remains compatible with the Xcode 16 compiler used by CI.
-
-## [2.6.5] - 2026-08-28
-
-### Fixed
-
-- Tests no longer depend on the user's persisted ForgeFF settings.
-- Opening multiple media files from Finder with Open With now adds every selected file to the queue.
-- The main window and failure inspector adapt better to smaller window sizes instead of forcing content beyond the visible bounds.
 
 ## [2.6.4] - 2026-08-18
 
