@@ -56,28 +56,18 @@ xcodebuild \
 
 The archive and checksum are written to the ignored `release/` directory.
 
-## Automatic release
+## Continuous integration and release
 
-Pushes to `main` are handled by `.github/workflows/auto-release.yml`:
+Pushes to `main` and pull requests are validated by `.github/workflows/macos-ci.yml`. This workflow does not modify versions or publish releases.
 
-1. macOS CI validates scripts, assets, builds, and tests.
-2. The workflow selects the next patch version above the latest GitHub Release.
-3. It commits the version and changelog entry back to `main`.
-4. It builds and ad-hoc signs an arm64 + x86_64 app.
-5. It publishes the ZIP and SHA-256 checksum as a GitHub Release.
-
-Use `[skip release]` in a commit subject when a main-branch change should not create a release. The normal CI workflow still runs.
-
-## Manual release fallback
-
-The manual workflow in `.github/workflows/release.yml` remains available for an explicitly versioned tag:
+Releases are published explicitly by `.github/workflows/release.yml` for a version tag:
 
 ```bash
 git tag -a v2.6.8 -m "ForgeFF 2.6.8"
 git push origin v2.6.8
 ```
 
-The tag must match `MARKETING_VERSION` in the Xcode project.
+The tag must match `MARKETING_VERSION` in the Xcode project. This prevents ordinary commits to `main` from creating unexpected releases.
 
 ## Pull requests
 
