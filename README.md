@@ -126,81 +126,10 @@ ForgeFF checks the official `yinon-mitin/ForgeFF` GitHub Releases feed when it l
 - Checksums are published alongside every release archive. The updater never installs an unverified archive or a bundle from another application.
 - If GitHub is unavailable, ForgeFF keeps working normally and shows a retry action instead of blocking startup.
 
-## Development
+## Documentation
 
-### Build locally
-
-For the standard build-and-launch loop, use:
-
-```bash
-./script/build_and_run.sh
-```
-
-Pass `--verify` for a launch smoke test, `--debug` for LLDB, `--logs` for the live app log, or `--telemetry` for ForgeFF subsystem events.
-
-The helper applies and verifies an ad-hoc signature after each local build. This requires no Apple Developer account.
-
-The equivalent direct build command is:
-
-```bash
-xcodebuild \
-  -project ForgeFF.xcodeproj \
-  -scheme ForgeFF \
-  -destination 'platform=macOS' \
-  -derivedDataPath .build/DerivedData \
-  CODE_SIGNING_ALLOWED=NO \
-  build
-
-codesign --force --deep --sign - --timestamp=none --options runtime --entitlements ForgeFF/ForgeFF.entitlements ".build/DerivedData/Build/Products/Debug/ForgeFF.app"
-codesign --verify --deep --strict --verbose=2 ".build/DerivedData/Build/Products/Debug/ForgeFF.app"
-```
-
-Run the built app:
-
-```bash
-open ".build/DerivedData/Build/Products/Debug/ForgeFF.app"
-```
-
-### Test locally
-
-```bash
-xcodebuild \
-  -project ForgeFF.xcodeproj \
-  -scheme ForgeFF \
-  -destination 'platform=macOS' \
-  -derivedDataPath .build/DerivedData \
-  CODE_SIGNING_ALLOWED=NO \
-  test
-```
-
-### Release packaging
-
-The repository includes `.github/workflows/release.yml` for tagged macOS releases. The intended release flow is:
-
-1. Run the test suite.
-2. Build a universal Release app for Apple silicon and Intel Macs.
-3. Apply and verify an ad-hoc code signature without an Apple Developer account.
-4. Upload `ForgeFF-X.Y.Z-macOS.zip` and its checksum to GitHub Releases.
-
-No Apple signing secrets are required. Ad-hoc signing protects the bundle from undetected modification after signing, but it does not identify the developer and cannot be notarized by Apple. Users may still need to right-click the app, choose `Open`, and confirm the first launch.
-
-Create the same package locally with:
-
-```bash
-./script/package_release.sh
-```
-
-The archive and checksum are written to the ignored `release/` directory. To publish a release, ensure `MARKETING_VERSION` matches the intended tag, push the main branch, then push an annotated tag such as `v2.6.4`. GitHub Actions validates the version, tests, builds, signs, verifies, packages, and creates the GitHub Release.
-
-## Repository Notes
-
-- Canonical icon source: `forgeFF-icon-v2.png`
-- Generated app icons: `ForgeFF/Assets.xcassets/AppIcon.appiconset/`
-- Regenerate icon renditions with:
-
-```bash
-./scripts/generate_appiconset.sh
-```
+- [Development Usage](docs/development.md) — local build, tests, packaging, and release workflow.
+- [Repository Notes](docs/repository-notes.md) — maintainer notes, visual assets, and security boundary.
 
 ## License
 
