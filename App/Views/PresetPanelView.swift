@@ -1075,6 +1075,26 @@ struct PresetOptionsPanelView: View {
                         HelpPopoverButton(topic: .externalAudio)
                     }
 
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Format")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        FocusableContainer(
+                            router: sidebarFocusRouter,
+                            target: .audioCodec,
+                            onKeyDown: pillKeyHandler(
+                                options: AudioCodec.externalTrackChoices,
+                                selection: optionsBinding(\.audioCodec)
+                            )
+                        ) {
+                            WrappingPills(
+                                options: AudioCodec.externalTrackChoices,
+                                selection: optionsBinding(\.audioCodec),
+                                title: { $0.displayName }
+                            )
+                        }
+                    }
+
                     HStack(spacing: 8) {
                         FocusableContainer(
                             router: sidebarFocusRouter,
@@ -3138,6 +3158,9 @@ struct PresetOptionsPanelView: View {
         guard let urls = queueStore.chooseExternalAudioURLs(), !urls.isEmpty else { return }
         let attachments = urls.map { ExternalAudioAttachment(fileURL: $0) }
         viewModel.updateOptions { options in
+            if !AudioCodec.externalTrackChoices.contains(options.audioCodec) {
+                options.audioCodec = .aac
+            }
             options.externalAudioAttachments = mergeExternalAudioAttachments(
                 existing: options.externalAudioAttachments,
                 additions: attachments

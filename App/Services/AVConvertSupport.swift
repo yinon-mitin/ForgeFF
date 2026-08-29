@@ -5,6 +5,11 @@ struct AVConvertCapabilities: Equatable {
     var executableURL: URL?
 
     static let unavailable = AVConvertCapabilities(isAvailable: false, executableURL: nil)
+
+    func supportsHDRInput(codecName: String?) -> Bool {
+        guard isAvailable, let codecName else { return false }
+        return codecName.lowercased() == "h264" || codecName.lowercased() == "hevc"
+    }
 }
 
 enum ToneMappingBackend: String, Codable, CaseIterable, Identifiable, Equatable {

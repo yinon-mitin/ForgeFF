@@ -23,6 +23,19 @@ Useful flags:
 
 The helper applies and verifies an ad-hoc signature after each local build.
 
+## Terminal file handoff
+
+The `script/forgeff` helper supports both GUI handoff and a deterministic headless conversion path:
+
+```bash
+./script/forgeff add ~/Movies/example.mkv
+./script/forgeff add ~/Movies/*.mp4
+./script/forgeff convert ~/Movies/example.mkv --preset telegram --output-dir ./out
+./script/forgeff convert ~/Movies/example.mkv --audio-codec mp3 --container mkv
+```
+
+The CLI conversion path uses the machine's FFmpeg executable and intentionally supports a small explicit option set. See [CLI documentation](cli.md) for the complete argument index and limitations. It does not currently expose every GUI setting or the GUI's Apple `avconvert` HDR pipeline; HDR-to-SDR should be performed through the main app until the conversion engine is shared between both interfaces.
+
 ## Test
 
 ```bash

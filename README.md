@@ -71,6 +71,8 @@ Download ForgeFF from GitHub Releases:
 - Drag files or folders into the queue.
 - Use the toolbar `Add…` menu to import files or folders manually.
 - In Finder, right-click a supported media file and choose `Open With` → `ForgeFF`. The file is added with the last-used conversion settings and its output is placed beside the source file when macOS grants access to that folder.
+- From Terminal, use `script/forgeff add file1.mkv file2.mp4` to send files to the main ForgeFF application. The GUI remains responsible for presets, options, queue control, and conversion.
+- ForgeFF supports CLI arguments in addition to the main GUI. For a headless conversion, use `script/forgeff convert input.mkv --preset telegram --output-dir ./out`; see the complete option index in [CLI documentation](docs/cli.md).
 - Select one or more queue items to apply settings to a subset of the queue.
 
 ### Pick a preset

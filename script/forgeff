@@ -1,0 +1,274 @@
+#!/bin/bash
+
+set -euo pipefail
+
+usage() {
+    cat <<'EOF'
+Usage:
+  forgeff add FILE [FILE ...]
+  forgeff convert INPUT [options]
+
+Commands:
+  add FILE ...             Send files to the main ForgeFF application.
+  convert INPUT            Convert one file through the terminal.
+
+Convert options:
+  --preset NAME             telegram (default) or efficient-hevc
+  --output FILE             Write to an exact output path
+  --output-dir DIRECTORY    Write output to DIRECTORY
+  --container FORMAT        mp4, mov, or mkv
+  --video-preset PRESET     FFmpeg video preset, e.g. veryfast, medium, slow
+  --crf VALUE               Override video quality value
+  --audio-bitrate RATE      Override audio bitrate, e.g. 128k
+  --audio-channels COUNT    Override output audio channel count
+  --video-bitrate RATE       Override video bitrate, e.g. 2500k
+  --sample-rate RATE         Override audio sample rate, e.g. 48000
+  --metadata MODE            Keep or remove metadata and chapters
+  --web-optimization         Enable fast-start MP4/MOV output
+  --progress                 Emit FFmpeg progress on stdout
+  --video-codec CODEC       h264, hevc, vp9, av1, or prores
+  --audio-codec CODEC       copy, aac, or mp3
+  --external-audio FILE     Add an external audio track (repeatable)
+  --subtitle FILE            Add an external SRT subtitle (repeatable)
+  --audio-only              Produce an audio-only output
+  --overwrite               Replace an existing output
+  --dry-run                 Print the FFmpeg command without running it
+EOF
+}
+
+fail() {
+    printf 'forgeff: %s\n' "$1" >&2
+    exit "${2:-64}"
+}
+
+if [[ $# -eq 0 || "$1" == "--help" || "$1" == "-h" ]]; then
+    usage
+    [[ $# -gt 0 ]] && exit 0
+    exit 64
+fi
+
+command="$1"
+shift
+
+if [[ "$command" == "add" ]]; then
+    [[ $# -gt 0 ]] || fail 'add requires at least one file.'
+    for path in "$@"; do
+        [[ -f "$path" ]] || fail "file not found or not a regular file: $path" 66
+    done
+    open_binary="${FORGEFF_OPEN_BINARY:-/usr/bin/open}"
+    app_name="${FORGEFF_APP_NAME:-ForgeFF}"
+    for path in "$@"; do
+        "$open_binary" -a "$app_name" "$path"
+    done
+    exit 0
+fi
+
+[[ "$command" == "convert" ]] || { printf 'forgeff: unknown command: %s\n\n' "$command" >&2; usage >&2; exit 64; }
+if [[ $# -eq 0 ]]; then
+    fail 'convert requires an input file.'
+elif [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    usage
+    exit 0
+fi
+
+input="$1"
+shift
+[[ -f "$input" ]] || fail "file not found or not a regular file: $input" 66
+
+preset='telegram'
+output_dir="$(dirname "$input")"
+output_path=''
+container=''
+video_preset='medium'
+crf_override=''
+audio_bitrate_override=''
+audio_channels=''
+video_bitrate=''
+sample_rate=''
+metadata_mode='keep'
+web_optimization=0
+progress=0
+resolution=''
+frame_rate=''
+remove_subtitles=0
+metadata_args=()
+video_codec=''
+audio_codec=''
+overwrite=0
+audio_only=0
+dry_run=0
+external_audio=()
+subtitles=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --preset) [[ $# -ge 2 ]] || fail '--preset requires a value.'; preset="$2"; shift 2 ;;
+        --output) [[ $# -ge 2 ]] || fail '--output requires a path.'; output_path="$2"; shift 2 ;;
+        --output-dir) [[ $# -ge 2 ]] || fail '--output-dir requires a value.'; output_dir="$2"; shift 2 ;;
+        --video-preset) [[ $# -ge 2 ]] || fail '--video-preset requires a value.'; video_preset="$2"; shift 2 ;;
+        --crf) [[ $# -ge 2 ]] || fail '--crf requires a value.'; crf_override="$2"; shift 2 ;;
+        --audio-bitrate) [[ $# -ge 2 ]] || fail '--audio-bitrate requires a value.'; audio_bitrate_override="$2"; shift 2 ;;
+        --audio-channels) [[ $# -ge 2 ]] || fail '--audio-channels requires a value.'; audio_channels="$2"; shift 2 ;;
+        --video-bitrate) [[ $# -ge 2 ]] || fail '--video-bitrate requires a value.'; video_bitrate="$2"; shift 2 ;;
+        --sample-rate) [[ $# -ge 2 ]] || fail '--sample-rate requires a value.'; sample_rate="$2"; shift 2 ;;
+        --metadata) [[ $# -ge 2 ]] || fail '--metadata requires keep or remove.'; metadata_mode="$2"; shift 2 ;;
+        --web-optimization) web_optimization=1; shift ;;
+        --progress) progress=1; shift ;;
+        --resolution) [[ $# -ge 2 ]] || fail '--resolution requires WIDTHxHEIGHT.'; resolution="$2"; shift 2 ;;
+        --frame-rate) [[ $# -ge 2 ]] || fail '--frame-rate requires a value.'; frame_rate="$2"; shift 2 ;;
+        --remove-subtitles) remove_subtitles=1; shift ;;
+        --container) [[ $# -ge 2 ]] || fail '--container requires a value.'; container="$2"; shift 2 ;;
+        --video-codec) [[ $# -ge 2 ]] || fail '--video-codec requires a value.'; video_codec="$2"; shift 2 ;;
+        --audio-codec) [[ $# -ge 2 ]] || fail '--audio-codec requires a value.'; audio_codec="$2"; shift 2 ;;
+        --external-audio) [[ $# -ge 2 ]] || fail '--external-audio requires a file.'; external_audio+=("$2"); shift 2 ;;
+        --subtitle) [[ $# -ge 2 ]] || fail '--subtitle requires a file.'; subtitles+=("$2"); shift 2 ;;
+        --audio-only) audio_only=1; shift ;;
+        --overwrite) overwrite=1; shift ;;
+        --dry-run) dry_run=1; shift ;;
+        --help|-h) usage; exit 0 ;;
+        *) fail "unknown convert option: $1" ;;
+    esac
+done
+
+case "$preset" in
+    telegram)
+        : "${container:=mp4}"
+        : "${video_codec:=h264}"
+        : "${audio_codec:=aac}"
+        audio_bitrate='192k'
+        video_args=(-c:v libx264 -preset medium -crf 19 -pix_fmt yuv420p)
+        ;;
+    efficient-hevc)
+        : "${container:=mp4}"
+        : "${video_codec:=hevc}"
+        : "${audio_codec:=aac}"
+        audio_bitrate='192k'
+        video_args=(-c:v libx265 -preset medium -crf 25 -pix_fmt yuv420p -tag:v hvc1)
+        ;;
+    *) fail "unsupported preset: $preset" ;;
+esac
+
+case "$container" in mp4|mov|mkv) ;; *) fail "unsupported container: $container" ;; esac
+case "$video_codec" in
+    h264) video_args=(-c:v libx264 -preset medium -crf 21 -pix_fmt yuv420p) ;;
+    hevc) video_args=(-c:v libx265 -preset medium -crf 26 -pix_fmt yuv420p -tag:v hvc1) ;;
+    vp9) video_args=(-c:v libvpx-vp9 -b:v 0 -crf 32 -pix_fmt yuv420p) ;;
+    av1) video_args=(-c:v libsvtav1 -preset 5 -crf 30 -pix_fmt yuv420p) ;;
+    prores) video_args=(-c:v prores_ks -profile:v 3) ;;
+    *) fail "unsupported video codec: $video_codec" ;;
+esac
+case "$audio_codec" in copy) audio_args=(-c:a copy);; aac) audio_args=(-c:a aac -b:a "$audio_bitrate");; mp3) audio_args=(-c:a libmp3lame -b:a 192k);; *) fail "unsupported audio codec: $audio_codec";; esac
+if [[ -n "$video_bitrate" ]]; then [[ "$video_bitrate" =~ ^[0-9]+[kKmM]$ ]] || fail 'video bitrate must look like 2500k or 1M.'; video_args+=(-b:v "$video_bitrate"); fi
+if [[ -n "$sample_rate" ]]; then [[ "$sample_rate" =~ ^[1-9][0-9]*$ ]] || fail 'sample rate must be a positive integer.'; audio_args+=(-ar "$sample_rate"); fi
+case "$metadata_mode" in keep) ;; remove) metadata_args=(-map_metadata -1 -map_chapters -1);; *) fail 'metadata must be keep or remove.';; esac
+if [[ -n "$audio_bitrate_override" ]]; then
+    [[ "$audio_bitrate_override" =~ ^[0-9]+[kKmM]$ ]] || fail 'audio bitrate must look like 128k or 1M.'
+    audio_args=(-c:a "${audio_args[1]}" -b:a "$audio_bitrate_override")
+fi
+if [[ -n "$audio_channels" ]]; then
+    [[ "$audio_channels" =~ ^[1-9][0-9]*$ ]] || fail 'audio channels must be a positive integer.'
+    audio_args+=(-ac "$audio_channels")
+fi
+[[ "$video_preset" =~ ^(veryfast|faster|fast|medium|slow|slower|veryslow|placebo)$ ]] || fail "unsupported video preset: $video_preset"
+if [[ -n "$crf_override" ]]; then
+    [[ "$crf_override" =~ ^[0-9]+$ ]] || fail 'CRF must be a non-negative integer.'
+    for index in "${!video_args[@]}"; do
+        if [[ "${video_args[$index]}" == '-crf' ]]; then video_args[$((index + 1))]="$crf_override"; fi
+    done
+fi
+for index in "${!video_args[@]}"; do
+    if [[ "${video_args[$index]}" == '-preset' ]]; then video_args[$((index + 1))]="$video_preset"; fi
+done
+if [[ -n "$resolution" ]]; then
+    [[ "$resolution" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]] || fail 'resolution must look like WIDTHxHEIGHT.'
+    scale_resolution="${resolution/x/:}"
+    video_args+=(-vf "scale=$scale_resolution")
+fi
+if [[ -n "$frame_rate" ]]; then
+    [[ "$frame_rate" =~ ^[0-9]+([.][0-9]+)?$ ]] && [[ "$frame_rate" != 0* ]] || fail 'frame rate must be a positive number.'
+    video_args+=(-r "$frame_rate")
+fi
+
+for path in "${external_audio[@]-}" "${subtitles[@]-}"; do
+    [[ -n "$path" ]] || continue
+    [[ -f "$path" ]] || fail "file not found or not a regular file: $path" 66
+done
+mkdir -p "$output_dir"
+base="$(basename "$input")"
+base="${base%.*}"
+output="$output_dir/${base}_${preset}.${container}"
+if [[ -n "$output_path" ]]; then output="$output_path"; fi
+map_args=()
+input_args=(-i "$input")
+
+if (( audio_only )); then
+    map_args+=(-vn)
+else
+    map_args+=(-map 0:v:0)
+fi
+
+if [[ ${#external_audio[@]} -gt 0 ]]; then
+    for path in "${external_audio[@]}"; do
+        input_args+=(-i "$path")
+    done
+    for index in "${!external_audio[@]}"; do
+        map_args+=(-map "$((index + 1)):a:0?")
+    done
+    map_args+=(-shortest)
+else
+    map_args+=(-map 0:a:0?)
+fi
+
+if [[ ${#subtitles[@]} -gt 0 && $remove_subtitles -eq 0 ]]; then
+    for path in "${subtitles[@]}"; do
+        input_args+=(-i "$path")
+    done
+    for index in "${!subtitles[@]}"; do
+        subtitle_input_index=$((1 + ${#external_audio[@]} + index))
+        map_args+=(-map "$subtitle_input_index:0")
+    done
+fi
+
+subtitle_args=()
+if (( remove_subtitles )); then
+    map_args+=(-sn)
+elif [[ ${#subtitles[@]} -gt 0 ]]; then
+    if [[ "$container" == mp4 || "$container" == mov ]]; then subtitle_args=(-c:s mov_text); else subtitle_args=(-c:s copy); fi
+fi
+output_mode=(-n)
+(( overwrite )) && output_mode=(-y)
+format_args=()
+if [[ "$container" == mp4 || "$container" == mov ]] && (( ! audio_only || web_optimization )); then
+    format_args=(-movflags +faststart)
+fi
+progress_args=()
+(( progress )) && progress_args=(-progress pipe:1)
+args=(-hide_banner "${output_mode[@]}" "${input_args[@]}" "${map_args[@]}")
+if [[ ${#metadata_args[@]} -gt 0 ]]; then
+    args+=("${metadata_args[@]}")
+fi
+if (( ! audio_only )); then
+    args+=("${video_args[@]}")
+fi
+args+=("${audio_args[@]}")
+if [[ ${#subtitle_args[@]} -gt 0 ]]; then
+    args+=("${subtitle_args[@]}")
+fi
+if [[ ${#format_args[@]} -gt 0 ]]; then
+    args+=("${format_args[@]}")
+fi
+if [[ ${#progress_args[@]} -gt 0 ]]; then
+    args+=("${progress_args[@]}")
+fi
+args+=("$output")
+
+if (( dry_run )); then
+    printf '%q ' "${args[@]}"
+    printf '\n'
+    exit 0
+fi
+
+ffmpeg_binary="${FORGEFF_FFMPEG_BINARY:-/opt/homebrew/bin/ffmpeg}"
+[[ -x "$ffmpeg_binary" ]] || fail "FFmpeg executable not found: $ffmpeg_binary" 69
+"$ffmpeg_binary" "${args[@]}"
+printf 'Created %s\n' "$output"

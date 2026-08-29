@@ -84,6 +84,17 @@ final class ConversionOptionsTests: XCTestCase {
         XCTAssertEqual(VideoCodec.allowedCodecs(for: .mkv), [.h264, .hevc, .vp9, .av1])
     }
 
+    func testExternalAudioTrackChoicesAreAACAndMP3() {
+        XCTAssertEqual(AudioCodec.externalTrackChoices, [.aac, .mp3])
+    }
+
+    func testAppleToneMappingSupportsH264AndHEVCInputsOnly() {
+        let capabilities = AVConvertCapabilities(isAvailable: true, executableURL: URL(fileURLWithPath: "/usr/bin/avconvert"))
+        XCTAssertTrue(capabilities.supportsHDRInput(codecName: "h264"))
+        XCTAssertTrue(capabilities.supportsHDRInput(codecName: "hevc"))
+        XCTAssertFalse(capabilities.supportsHDRInput(codecName: "av1"))
+    }
+
     func testExternalSubtitleSelectionStoresPickedURL() {
         let picked = URL(fileURLWithPath: "/tmp/subtitle.srt")
         let result = ConversionOptions.resolveExternalSubtitleSelection(

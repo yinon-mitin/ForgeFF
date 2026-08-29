@@ -61,6 +61,8 @@ enum AudioCodec: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    static let externalTrackChoices: [AudioCodec] = [.aac, .mp3]
+
     var ffmpegCodec: String {
         switch self {
         case .copy: return "copy"

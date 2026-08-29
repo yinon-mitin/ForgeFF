@@ -5,7 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [2.6.11] - 2026-08-29
+## [2.6.12] - 2026-08-29
+
+### Added
+
+- Added a working terminal conversion interface with presets, codec/container selection, bitrate, resolution, frame-rate, audio, subtitles, metadata, progress, and overwrite controls.
+- Added CLI documentation and expanded shell coverage for validation, external media, and generated FFmpeg arguments.
+
 
 - Automated release from main.
 
@@ -40,6 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Added the `script/forgeff add` terminal helper for sending media files to the main ForgeFF application.
 - ForgeFF registers supported video and audio formats with macOS so files can be sent to the app from Finder using Open With.
 - Files opened from Finder are added to the queue with the last-used conversion settings, selected automatically, and configured to export beside the source file when macOS grants access to that folder.
 - Homebrew FFmpeg detection now checks both standard `bin` symlinks and `opt/ffmpeg/bin` paths on Apple silicon and Intel Macs.

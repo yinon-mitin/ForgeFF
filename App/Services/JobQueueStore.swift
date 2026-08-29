@@ -1106,6 +1106,7 @@ final class JobQueueStore: ObservableObject {
         job.options.enableHDRToSDR &&
         !job.options.isCustomCommandEnabled &&
         job.metadata?.isHDR == true &&
+        settingsStore.avconvertCapabilities.supportsHDRInput(codecName: job.metadata?.videoStream?.codecName) &&
         settingsStore.preferredToneMappingBackend == .appleAVConvert
     }
 

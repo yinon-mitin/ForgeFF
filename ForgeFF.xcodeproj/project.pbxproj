@@ -444,7 +444,7 @@
 						"@executable_path/../Frameworks",
 					);
 					MACOSX_DEPLOYMENT_TARGET = 13.0;
-					MARKETING_VERSION = 2.6.11;
+					MARKETING_VERSION = 2.6.12;
 					PRODUCT_BUNDLE_IDENTIFIER = com.yinonmitin.ForgeFF;
 					PRODUCT_NAME = "$(TARGET_NAME)";
 					SDKROOT = macosx;
@@ -469,7 +469,7 @@
 						"@executable_path/../Frameworks",
 					);
 					MACOSX_DEPLOYMENT_TARGET = 13.0;
-					MARKETING_VERSION = 2.6.11;
+					MARKETING_VERSION = 2.6.12;
 					PRODUCT_BUNDLE_IDENTIFIER = com.yinonmitin.ForgeFF;
 					PRODUCT_NAME = "$(TARGET_NAME)";
 					SDKROOT = macosx;
@@ -492,7 +492,7 @@
 					"@loader_path/../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.6.11;
+				MARKETING_VERSION = 2.6.12;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yinonmitin.ForgeFFTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -514,7 +514,7 @@
 					"@loader_path/../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.6.11;
+				MARKETING_VERSION = 2.6.12;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yinonmitin.ForgeFFTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
