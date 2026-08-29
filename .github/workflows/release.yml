@@ -119,7 +119,7 @@ jobs:
           shasum -a 256 "$(basename "${ZIP_PATH}")" > "$(basename "${SHA_PATH}")"
 
       - name: Upload GitHub Release assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             ${{ runner.temp }}/${{ env.RELEASE_ASSET_BASENAME }}.zip
