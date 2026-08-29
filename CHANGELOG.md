@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.6.15] - 2026-08-29
+
+### Fixed
+
+- Update checks now report explicitly when ForgeFF is already up to date.
+- Clipboard file URLs can be pasted into the queue with `Cmd+V`.
+
 ## [2.6.14] - 2026-08-29
 
 ### Fixed
