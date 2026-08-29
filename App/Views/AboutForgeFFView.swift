@@ -131,6 +131,13 @@ struct AboutForgeFFView: View {
                 Text("Downloading and verifying update…")
             case .ready:
                 Text("Update installed. Restarting ForgeFF…")
+            case .upToDate:
+                Text("ForgeFF is up to date.")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Check Again") {
+                    Task { await updateService.checkForUpdates() }
+                }
             case let .failed(message):
                 Text(message)
                     .foregroundStyle(.secondary)

@@ -194,10 +194,11 @@ private struct ForgeFFCommands: Commands {
     }
 
     private func pasteFilesIntoQueue() {
-        let urls = NSPasteboard.general.readObjects(
+        let objects = NSPasteboard.general.readObjects(
             forClasses: [NSURL.self],
             options: [.urlReadingFileURLsOnly: true]
-        ) as? [URL] ?? []
+        ) as? [NSURL] ?? []
+        let urls = objects.compactMap { $0 as URL? }
         let files = urls.filter { $0.isFileURL && !$0.hasDirectoryPath }
         guard !files.isEmpty else { return }
         queueStore.addFiles(urls: files)
