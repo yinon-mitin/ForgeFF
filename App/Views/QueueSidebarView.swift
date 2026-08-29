@@ -14,6 +14,7 @@ struct QueueListView: View {
     let onAddFolder: () -> Void
 
     @State private var isEmptyChoicePopoverPresented = false
+    @State private var addMenuLocation: CGPoint?
     @State private var selectedFilter: QueueFilter = .all
     @State private var expandedFailureGroupKeys = Set<String>()
     @StateObject private var thumbnailStore = QueueThumbnailStore()
@@ -38,6 +39,29 @@ struct QueueListView: View {
                     }
                     .listStyle(.inset)
                     .scrollContentBackground(.hidden)
+                    .background {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .gesture(
+                                SpatialTapGesture()
+                                    .onEnded { value in
+                                        addMenuLocation = value.location
+                                    }
+                            )
+                    }
+                    .overlay(alignment: .topLeading) {
+                        if let addMenuLocation {
+                            Color.clear
+                                .frame(width: 1, height: 1)
+                                .position(addMenuLocation)
+                                .popover(isPresented: Binding(
+                                    get: { self.addMenuLocation != nil },
+                                    set: { if !$0 { self.addMenuLocation = nil } }
+                                ), arrowEdge: .bottom) {
+                                    addFilesPopover
+                                }
+                        }
+                    }
                 }
             }
         }
@@ -257,12 +281,7 @@ struct QueueListView: View {
                     isEmptyChoicePopoverPresented = true
                 }
                 .popover(isPresented: $isEmptyChoicePopoverPresented, arrowEdge: .bottom) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Button("Add Files…", action: onAddFiles)
-                        Button("Add Folder…", action: onAddFolder)
-                    }
-                    .padding(14)
-                    .frame(minWidth: 180)
+                    addFilesPopover
                 }
 
             VStack(spacing: 12) {
@@ -285,6 +304,15 @@ struct QueueListView: View {
             .padding(24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var addFilesPopover: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button("Add Files…", action: onAddFiles)
+            Button("Add Folder…", action: onAddFolder)
+        }
+        .padding(14)
+        .frame(minWidth: 180)
     }
 
 }
