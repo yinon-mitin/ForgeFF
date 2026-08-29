@@ -9,6 +9,7 @@ struct MainWindowView: View {
     @EnvironmentObject private var settingsStore: SettingsStore
     @EnvironmentObject private var commandHandler: AppCommandHandler
     @EnvironmentObject private var appDelegate: ForgeFFAppDelegate
+    @EnvironmentObject private var updateService: AppUpdateService
 
     @ObservedObject var viewModel: QueueViewModel
 
@@ -19,6 +20,7 @@ struct MainWindowView: View {
     @State private var inspectedFailureJobID: UUID?
     @State private var splitViewVisibility: NavigationSplitViewVisibility = .all
     @State private var quickLookKeyMonitor: Any?
+    @State private var updatePromptRelease: AppUpdateService.ReleaseInfo?
     @StateObject private var quickLookController = QueueQuickLookController()
     private let logger = Logger(subsystem: "com.yinonmitin.ForgeFF", category: "drop")
 
@@ -129,8 +131,26 @@ struct MainWindowView: View {
             installQuickLookMonitorIfNeeded()
             openFromFinder(urls: appDelegate.consumePendingOpenURLs())
         }
+        .task {
+            await updateService.checkForUpdates()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .forgeFFOpenFiles)) { _ in
             openFromFinder(urls: appDelegate.consumePendingOpenURLs())
+        }
+        .onReceive(updateService.$state) { state in
+            if case let .available(release) = state {
+                updatePromptRelease = release
+            }
+        }
+        .alert(item: $updatePromptRelease) { release in
+            Alert(
+                title: Text("ForgeFF Update Available"),
+                message: Text("Version \(release.version) is available from GitHub Releases."),
+                primaryButton: .default(Text("Update Now")) {
+                    Task { await updateService.downloadAndInstall() }
+                },
+                secondaryButton: .cancel(Text("Later"))
+            )
         }
         .onDisappear {
             removeQuickLookMonitor()

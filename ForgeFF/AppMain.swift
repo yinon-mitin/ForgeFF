@@ -40,6 +40,7 @@ struct ForgeFFApp: App {
     @StateObject private var dockProgressController: DockProgressController
     @StateObject private var viewModel: QueueViewModel
     @StateObject private var commandHandler: AppCommandHandler
+    @StateObject private var updateService: AppUpdateService
 
     init() {
         let settingsStore = SettingsStore()
@@ -48,6 +49,7 @@ struct ForgeFFApp: App {
         let queueStore = JobQueueStore(settingsStore: settingsStore, historyStore: historyStore)
         let dockProgressController = DockProgressController(queueStore: queueStore)
         let commandHandler = AppCommandHandler()
+        let updateService = AppUpdateService()
         _settingsStore = StateObject(wrappedValue: settingsStore)
         _historyStore = StateObject(wrappedValue: historyStore)
         _userPresetStore = StateObject(wrappedValue: userPresetStore)
@@ -55,6 +57,7 @@ struct ForgeFFApp: App {
         _dockProgressController = StateObject(wrappedValue: dockProgressController)
         _viewModel = StateObject(wrappedValue: QueueViewModel(queueStore: queueStore, userPresetStore: userPresetStore))
         _commandHandler = StateObject(wrappedValue: commandHandler)
+        _updateService = StateObject(wrappedValue: updateService)
     }
 
     var body: some Scene {
@@ -67,6 +70,7 @@ struct ForgeFFApp: App {
                 .environmentObject(commandHandler)
                 .environmentObject(dockProgressController)
                 .environmentObject(appDelegate)
+                .environmentObject(updateService)
         }
         .defaultSize(width: 1100, height: 700)
         .commands {

@@ -22,6 +22,7 @@ struct AboutForgeFFOverlay: View {
 
 struct AboutForgeFFView: View {
     let onClose: () -> Void
+    @EnvironmentObject private var updateService: AppUpdateService
 
     private var appIcon: NSImage {
         NSImage(named: NSImage.applicationIconName) ?? NSApp.applicationIconImage
@@ -96,6 +97,8 @@ struct AboutForgeFFView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+
+            updateControls
         }
         .padding(24)
         .frame(width: 520, alignment: .topLeading)
@@ -106,6 +109,45 @@ struct AboutForgeFFView: View {
                 .stroke(Color.white.opacity(0.14), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.34), radius: 34, y: 18)
+    }
+
+    @ViewBuilder
+    private var updateControls: some View {
+        HStack(spacing: 10) {
+            switch updateService.state {
+            case .checking:
+                ProgressView()
+                    .controlSize(.small)
+                Text("Checking GitHub for updates…")
+            case let .available(release):
+                Text("Version \(release.version) is available")
+                Spacer()
+                Button("Update Now") {
+                    Task { await updateService.downloadAndInstall() }
+                }
+            case .downloading:
+                ProgressView()
+                    .controlSize(.small)
+                Text("Downloading and verifying update…")
+            case .ready:
+                Text("Update installed. Restarting ForgeFF…")
+            case let .failed(message):
+                Text(message)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Try Again") {
+                    Task { await updateService.checkForUpdates() }
+                }
+            default:
+                Text("ForgeFF checks GitHub Releases for checksum-verified updates.")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Check for Updates") {
+                    Task { await updateService.checkForUpdates() }
+                }
+            }
+        }
+        .font(.caption)
     }
 
     private var buildDetailsLine: String? {

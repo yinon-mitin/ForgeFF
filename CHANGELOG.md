@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Finder `Open With` metadata analysis now works with Homebrew FFprobe builds that load external codec libraries such as `libvmaf`; the desktop target no longer enables App Sandbox, which cannot load those external dynamic libraries.
 - Metadata analysis now records a safe success/failure event in the ForgeFF subsystem log without logging media contents or credentials.
+- ForgeFF now checks the official GitHub Releases feed at launch and supports user-confirmed checksum-verified in-app updates.
 
 ## [2.6.7] - 2026-08-28
 

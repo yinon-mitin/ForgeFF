@@ -118,11 +118,13 @@ Download ForgeFF from GitHub Releases:
 
 ## Updates
 
-ForgeFF’s public builds are currently distributed through GitHub Releases.
+ForgeFF checks the official `yinon-mitin/ForgeFF` GitHub Releases feed when it launches and can also be checked manually from `About ForgeFF`.
 
-- There is no in-app auto-update flow in the current public build.
-- To update, download the latest release archive and replace the existing app bundle.
-- Checksums are published alongside release archives for verification.
+- Only published, non-prerelease releases with the exact expected ForgeFF asset names are considered.
+- Before installation, the updater downloads the ZIP and its `.sha256` file, verifies the archive with SHA-256, and checks the bundle identifier and version.
+- Installation is confirmed by the user. ForgeFF exits, replaces the existing app through a short-lived updater process, cleans its staging directory, and relaunches the new version.
+- Checksums are published alongside every release archive. The updater never installs an unverified archive or a bundle from another application.
+- If GitHub is unavailable, ForgeFF keeps working normally and shows a retry action instead of blocking startup.
 
 ## Development
 

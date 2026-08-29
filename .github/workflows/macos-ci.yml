@@ -4,31 +4,57 @@ on:
   push:
     branches: ["main"]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
+    name: Build and test
     runs-on: macos-14
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
 
-      - name: Validate shell scripts
-        run: bash -n script/*.sh scripts/*.sh
+      - name: Validate repository assets
+        run: |
+          set -euo pipefail
+          git diff --check
+          bash -n script/*.sh scripts/*.sh
+          xmllint --noout docs/forgeff-banner.svg
 
       - name: Build and test
         run: |
+          set -o pipefail
           xcodebuild \
             -project ForgeFF.xcodeproj \
             -scheme ForgeFF \
             -destination 'platform=macOS' \
             -derivedDataPath .build/DerivedData \
+            -resultBundlePath "$RUNNER_TEMP/ForgeFF.xcresult" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            clean build test
+            clean build test 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
+
+      - name: Upload test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ForgeFF-macos-ci-diagnostics
+          path: |
+            ${{ runner.temp }}/ForgeFF.xcresult
+            ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
